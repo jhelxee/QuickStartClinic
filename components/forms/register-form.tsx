@@ -88,6 +88,18 @@ export function RegisterForm() {
           residence: values.residence,
           phone: values.phone,
         },
+        // Without this, Supabase falls back to the "Site URL" configured in
+        // its dashboard for every confirmation email, regardless of where the
+        // signup actually happened — so testing locally after deploying to
+        // Vercel (or vice versa) sends the confirmation link to the WRONG
+        // domain. window.location.origin is whatever domain the browser is
+        // actually on right now, so this is correct in local dev, on Vercel,
+        // and on any future custom domain, with nothing to remember to update.
+        //
+        // Supabase still requires this exact URL to be allow-listed under
+        // Authentication -> URL Configuration -> Redirect URLs in the
+        // dashboard, or it silently falls back to the Site URL anyway.
+        emailRedirectTo: `${window.location.origin}/login`,
       },
     });
 
