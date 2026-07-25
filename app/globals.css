@@ -1,26 +1,113 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 :root {
+  --radius: 0.65rem;
+
+  /* Brand palette — derived from the QuickStart Clinic mark */
+  --brand-blue-50: #eef7fe;
+  --brand-blue-100: #dcecfc;
+  --brand-blue-400: #4ba3ea;
+  --brand-blue-600: #1c7fe0;
+  --brand-blue-700: #0f5fb8;
+  --navy-900: #0b2a4a;
+  --ice-50: #f4f9fb;
+  --slate-700: #33404d;
+  --slate-400: #8a97a3;
+  --success-500: #2e9e6b;
+
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: var(--slate-700);
+  --card: #ffffff;
+  --card-foreground: var(--slate-700);
+  --popover: #ffffff;
+  --popover-foreground: var(--slate-700);
+  --primary: var(--brand-blue-600);
+  --primary-foreground: #ffffff;
+  --secondary: var(--ice-50);
+  --secondary-foreground: var(--navy-900);
+  --muted: var(--ice-50);
+  --muted-foreground: var(--slate-400);
+  --accent: var(--brand-blue-50);
+  --accent-foreground: var(--brand-blue-700);
+  --destructive: #c0392b;
+  --destructive-foreground: #ffffff;
+  --border: #e3eaf0;
+  --input: #dbe4ec;
+  --ring: var(--brand-blue-600);
+  --success: var(--success-500);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+
+  --color-brand-blue-50: var(--brand-blue-50);
+  --color-brand-blue-100: var(--brand-blue-100);
+  --color-brand-blue-400: var(--brand-blue-400);
+  --color-brand-blue-600: var(--brand-blue-600);
+  --color-brand-blue-700: var(--brand-blue-700);
+  --color-navy-900: var(--navy-900);
+  --color-ice-50: var(--ice-50);
+  --color-slate-700: var(--slate-700);
+  --color-slate-400: var(--slate-400);
+
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-jakarta);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --animate-float: float 6s ease-in-out infinite;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display;
+  }
+}
+
+@layer utilities {
+  .container-clinic {
+    @apply mx-auto w-full max-w-6xl px-6 lg:px-8;
+  }
 }
