@@ -69,6 +69,7 @@ Left sidebar → **SQL Editor** → **New query**. Open each file from
 | 5 | `05_status_guard.sql` | Stops patients self-approving appointments | Success. No rows returned. |
 | 6 | `06_availability.sql` | Privacy-safe "which slots are taken" lookup | Success. No rows returned. |
 | 7 | `07_verify.sql` | Checks your work — **read the output** | See below. |
+| 8 | `08_staff_role.sql` | Staff role + appointment approval | Success. No rows returned. |
 
 Every file has comments explaining *why*, not just what. Script 4 is the one
 that actually protects patient data — read it.
@@ -162,6 +163,63 @@ Then work through this, in order:
 8. **Try to break it.** With a logged-in session, `PATCH` an appointment to
    `{"status":"approved"}` directly against the REST API. The trigger must
    reject it. `{"status":"cancelled"}` must succeed.
+
+---
+
+## Roles
+
+Run [08_staff_role.sql](../supabase/migrations/08_staff_role.sql) then
+[09_roles_and_bookings.sql](../supabase/migrations/09_roles_and_bookings.sql),
+which replaces the original `is_staff` boolean with a three-value role.
+
+| Role | Lands on | Sees | Own portal |
+|---|---|---|---|
+| `client` | `/portal` | Only their own appointments | Yes |
+| `staff` | `/admin` | Every booking, with patient names | Yes |
+| `admin` | `/admin` | Every booking, with patient names | **No** |
+
+Assign roles **from the SQL Editor** — the only way, by design:
+
+```sql
+update public.profiles set role = 'admin' where email = 'you@example.com';
+update public.profiles set role = 'staff' where email = 'coordinator@example.com';
+```
+
+Sign out and back in. Staff and admin land straight on `/admin` with no button
+click; clients keep the family portal untouched.
+
+### Why the API can't grant a role
+
+Script 04's "Users can update own profile" policy lets a signed-in user update
+their own row — and it doesn't care *which* columns change. The moment a
+privilege column exists, any client could send:
+
+```
+PATCH /rest/v1/profiles?id=eq.<their-own-id>
+{ "role": "admin" }
+```
+
+and hand themselves every family's records. **RLS cannot stop this** — the row
+genuinely is theirs. It's the same shape of hole as the appointment status
+problem, and it needs the same fix: the `guard_profile_update` trigger, which
+compares `OLD` to `NEW` and rejects any change to `role`.
+
+**The lesson worth carrying:** when you add a column that grants privilege, ask
+who can write to it. A policy that was safe yesterday becomes a
+privilege-escalation bug the day you add a new column to the table it governs.
+
+That's the pattern worth carrying with you: **the moment you add a column that
+grants privilege, ask who can write to it.** A policy that was safe yesterday
+can become a privilege-escalation bug the day you add a new column to the table
+it governs.
+
+### What staff can and can't see
+
+Staff get two extra policies on `appointments` (view all, update all), and
+nothing else. There is deliberately **no** staff policy on `profiles` — every
+appointment row already carries `guardian_name`, `contact_phone`, and
+`contact_email`, so the approval screen has what it needs without exposing every
+family's date of birth and home address. Least privilege.
 
 ---
 

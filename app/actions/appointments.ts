@@ -101,13 +101,19 @@ export async function createAppointment(values: unknown): Promise<ActionResult> 
  *     self-approve.
  */
 export async function cancelAppointment(id: string): Promise<ActionResult> {
-  await requireUser();
+  const user = await requireUser();
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("appointments")
     .update({ status: "cancelled" })
-    .eq("id", id);
+    .eq("id", id)
+    // Scoped to the caller's own booking on purpose. RLS alone is not enough
+    // here any more: "Staff can update all appointments" means a staff or admin
+    // account calling this could cancel ANY family's booking by id. This is the
+    // client-facing cancel action, so it should only ever touch your own row —
+    // staff cancel through the Staff View, which is audited and deliberate.
+    .eq("user_id", user.id);
 
   if (error) {
     return { error: "We couldn't cancel that appointment. Please try again." };

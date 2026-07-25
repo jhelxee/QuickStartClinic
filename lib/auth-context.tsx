@@ -80,6 +80,10 @@ export function AuthProvider({
   }, [supabase]);
 
   const logout = useCallback(async () => {
+    // Drop a doctor offline straight away instead of leaving them showing as
+    // "in clinic" for the rest of the presence window. Harmless no-op for
+    // everyone else — the function only touches a row whose user_id matches.
+    await supabase?.rpc("end_presence");
     await supabase?.auth.signOut();
     setPatient(null);
     // Rerun the server components so the session cookie is re-read and any

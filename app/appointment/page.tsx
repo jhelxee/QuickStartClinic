@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { AppointmentPageBody } from "@/components/forms/appointment-page-body";
-import { getProfile } from "@/lib/dal";
+import { getDoctorPresence, getProfile } from "@/lib/dal";
 
 export const metadata: Metadata = {
   title: "Book an Appointment — QuickStart Clinic",
@@ -30,11 +30,16 @@ export default async function AppointmentPage() {
       }
     : null;
 
+  // Empty for logged-out visitors — doctor_presence() is granted to
+  // `authenticated` only, so staff whereabouts stay off the public internet.
+  const doctors = await getDoctorPresence();
+
   return (
     <div className="flex min-h-svh flex-col">
       <SiteHeader />
 
-      <main className="flex-1 bg-ice-50">
+      {/* Plain white, matching every other page shell. */}
+      <main className="flex-1">
         <div className="container-clinic py-16 lg:py-20">
           <div className="max-w-2xl">
             <span className="text-sm font-semibold tracking-wide text-brand-blue-700 uppercase">
@@ -50,7 +55,7 @@ export default async function AppointmentPage() {
           </div>
 
           <div className="mt-12">
-            <AppointmentPageBody defaults={defaults} />
+            <AppointmentPageBody defaults={defaults} doctors={doctors} />
           </div>
         </div>
       </main>

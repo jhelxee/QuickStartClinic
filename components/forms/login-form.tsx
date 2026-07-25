@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/forms/password-input";
+import { resolveLandingPath } from "@/app/actions/session";
 import { createClient } from "@/lib/supabase/client";
 import { loginSchema, type LoginValues } from "@/lib/validation";
 
@@ -41,9 +42,8 @@ export function LoginForm() {
       password: values.password,
     });
 
-    setIsSubmitting(false);
-
     if (error) {
+      setIsSubmitting(false);
       // Deliberately vague, and attached to the password field. Saying "no
       // account with that email" would let anyone test which addresses are
       // registered at a paediatric clinic.
@@ -54,15 +54,30 @@ export function LoginForm() {
       return;
     }
 
+    // Role lives in `profiles`, which only the server can read on this user's
+    // behalf — so ask where this account belongs. Staff and admin go straight
+    // to the Staff View rather than the family portal.
+    const landing = await resolveLandingPath();
+    setIsSubmitting(false);
+
     toast.success("Welcome back to QuickStart Clinic", {
       description: `Signed in as ${values.email}`,
     });
 
-    // proxy.ts adds ?next=... when it bounces you off a private page, so you
-    // land where you were originally headed.
+    // proxy.ts adds ?next=... when it bounces you off a private page, so an
+    // explicit destination wins over the role default.
     const next = searchParams.get("next");
-    router.push(next?.startsWith("/") ? next : "/portal");
-    router.refresh();
+    const destination = next?.startsWith("/") ? next : landing;
+
+    // replace(), not push() — going Back to a login form you've already used
+    // isn't useful, and it stops the browser re-submitting it.
+    //
+    // Deliberately NO router.refresh() here. refresh() refetches the route you
+    // are currently on, which is /login — and proxy.ts redirects an
+    // authenticated user away from /login, so that refetch races the navigation
+    // and cancels it. The destination renders on the server with the new cookie
+    // regardless, and AuthProvider's onAuthStateChange updates the header.
+    router.replace(destination);
   }
 
   return (

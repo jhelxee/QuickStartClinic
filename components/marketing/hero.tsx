@@ -12,6 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { BlobMotif } from "@/components/marketing/blob-motif";
 import { OfficeStatusBadge } from "@/components/marketing/office-status-badge";
+import { DoctorStatusBadge } from "@/components/presence/doctor-status";
+import type { DoctorPresence } from "@/lib/dal";
 import { doctorSchedule, officeHours } from "@/lib/schedule-data";
 
 function shortDays(days: string[]) {
@@ -30,7 +32,24 @@ const trustPoints = [
   "Family-paced plans, not one-size sessions",
 ];
 
-export function Hero() {
+export function Hero({
+  presence = [],
+}: {
+  /**
+   * Live "in clinic" status, keyed by doctor name.
+   *
+   * Empty for logged-out visitors — getDoctorPresence() in lib/dal.ts returns
+   * [] before checking anything else, because doctor_presence() is granted to
+   * `authenticated` only. That means this card renders identically to before
+   * for anyone not signed in: no live badge, same static schedule. The privacy
+   * boundary decided earlier ("signed-in patients only can see who's in the
+   * building") holds automatically here rather than needing a second check in
+   * this component to remember and get right.
+   */
+  presence?: DoctorPresence[];
+}) {
+  const presenceByName = new Map(presence.map((p) => [p.name, p.in_clinic]));
+
   return (
     <section className="relative overflow-hidden bg-navy-900">
       <BlobMotif className="-top-32 -right-40 h-[560px] w-[560px] opacity-50" />
@@ -132,6 +151,11 @@ export function Hero() {
                 <div className="mt-4 flex flex-col gap-3">
                   {doctorSchedule.map((doctor) => {
                     const Icon = specialtyIcon[doctor.specialty] ?? Brain;
+                    // undefined (not signed in, or this doctor has no linked
+                    // account yet) vs. false (signed in, confirmed not in
+                    // clinic) are deliberately different: only the latter shows
+                    // the grey "Not in right now" badge.
+                    const inClinic = presenceByName.get(doctor.name);
                     return (
                       <div key={doctor.name} className="flex items-start gap-3">
                         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700">
@@ -146,6 +170,14 @@ export function Hero() {
                             {shortDays(doctor.days)}
                           </p>
                         </div>
+                        {/* Right-aligned rather than sitting next to the name —
+                            reads as a status column for the whole list instead
+                            of decorating each name individually. */}
+                        {inClinic !== undefined && (
+                          <div className="shrink-0">
+                            <DoctorStatusBadge inClinic={inClinic} size="sm" />
+                          </div>
+                        )}
                       </div>
                     );
                   })}

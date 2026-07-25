@@ -5,7 +5,9 @@ import {
   type AppointmentDefaults,
 } from "@/components/forms/appointment-form";
 import { AppointmentGate } from "@/components/forms/appointment-gate";
+import { DoctorStatusPanel } from "@/components/presence/doctor-status";
 import { Card, CardContent } from "@/components/ui/card";
+import type { DoctorPresence } from "@/lib/dal";
 
 const sidebarPoints = [
   {
@@ -35,8 +37,10 @@ const sidebarPoints = [
  */
 export function AppointmentPageBody({
   defaults,
+  doctors,
 }: {
   defaults: AppointmentDefaults | null;
+  doctors: DoctorPresence[];
 }) {
   if (!defaults) {
     return (
@@ -55,6 +59,8 @@ export function AppointmentPageBody({
       </Card>
 
       <div className="flex flex-col gap-6 lg:sticky lg:top-28">
+        <DoctorStatusPanel doctors={doctors} />
+
         {sidebarPoints.map((point) => (
           <div key={point.title} className="flex gap-3.5 rounded-2xl border border-border bg-white p-5">
             <point.icon className="mt-0.5 size-5 shrink-0 text-brand-blue-600" />

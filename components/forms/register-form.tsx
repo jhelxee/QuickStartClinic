@@ -122,9 +122,12 @@ export function RegisterForm() {
     toast.success("Account created", {
       description: `Welcome to QuickStart Clinic, ${values.legalName.split(" ")[0]}.`,
     });
-    router.push("/portal");
-    // Re-run the server components so they see the new session cookie.
-    router.refresh();
+
+    // No router.refresh() — same reason as the login form: it refetches
+    // /register, which proxy.ts redirects for an authenticated user, and that
+    // races the navigation away. /portal renders server-side with the new
+    // cookie on arrival.
+    router.replace("/portal");
   }
 
   return (

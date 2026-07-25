@@ -183,6 +183,31 @@ export const appointmentSchema = z.object({
 
 export type AppointmentValues = z.infer<typeof appointmentSchema>;
 
+// ---------------------------------------------------------------------------
+// Staff-recorded booking (phone / walk-in)
+// ---------------------------------------------------------------------------
+
+/**
+ * Same details a family would give online, plus an optional account to attach
+ * the booking to.
+ *
+ * `familyEmail` is looked up with find_family_by_email. Left blank, the
+ * appointment is stored with no owner — visible to staff only, which is the
+ * right outcome for a caller who has never used the site.
+ */
+export const staffAppointmentSchema = appointmentSchema.extend({
+  familyEmail: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      (value) => !value || z.string().email().safeParse(value).success,
+      "Enter a valid email address, or leave this blank"
+    ),
+});
+
+export type StaffAppointmentValues = z.infer<typeof staffAppointmentSchema>;
+
 /**
  * Cross-field check kept outside the schema for the same reason as
  * checkPasswordsMatch above — see appointment-form.tsx.

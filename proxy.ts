@@ -31,7 +31,10 @@ import {
 // logged-out visitors — a card explaining why an account is needed, with
 // Register and Log In buttons. That's friendlier than a bare redirect, and the
 // page itself server-checks the session before rendering the booking form.
-const PROTECTED_ROUTES = ["/portal"];
+// /admin needs more than a session — it needs the is_staff flag — so the real
+// check is requireStaff() in the page. Listing it here just bounces logged-out
+// visitors to the login screen instead of the portal redirect.
+const PROTECTED_ROUTES = ["/portal", "/admin"];
 const AUTH_ROUTES = ["/login", "/register"];
 
 export default async function proxy(request: NextRequest) {
@@ -78,6 +81,23 @@ export default async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+
+  // Never redirect a Server Action.
+  //
+  // Server Actions POST to the URL you are currently on, and Next marks them
+  // with a Next-Action header. The login form posts to /login *after*
+  // signInWithPassword has succeeded — so without this check the rule below
+  // sees "an authenticated user on an auth route" and redirects the POST to
+  // /portal. The browser then receives an HTML page where it expected an action
+  // result, and throws "An unexpected response was received from the server".
+  //
+  // Redirects here are for navigation. Authorisation for actions belongs to the
+  // action itself: every one of ours starts with requireUser() or requireStaff(),
+  // and RLS backs that up.
+  if (request.headers.has("next-action")) {
+    return response;
+  }
+
   const isProtected = PROTECTED_ROUTES.some((route) => pathname.startsWith(route));
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route));
 

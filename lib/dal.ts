@@ -56,6 +56,16 @@ export async function requireUser(): Promise<User> {
   return user;
 }
 
+/**
+ * client — a family. Sees only their own appointments.
+ * staff  — coordinator. Sees every booking, plus their own client portal.
+ * doctor — clinician. Same clinic-side access as staff; their session drives
+ *          the "in clinic" indicator patients see.
+ * admin  — administrator. Clinic-side access plus master data (doctor list,
+ *          availability, staff roles). No client portal at all.
+ */
+export type Role = "client" | "staff" | "doctor" | "admin";
+
 export interface Profile {
   id: string;
   email: string;
@@ -64,14 +74,25 @@ export interface Profile {
   sex: "female" | "male" | "prefer_not_to_say";
   residence: string;
   phone: string;
+  role: Role;
 }
 
 /**
  * The logged-in user's profile row.
  *
- * Note there is no `.eq("id", user.id)` — the RLS policy already restricts this
- * table to the caller's own row. That is the whole point of RLS: forgetting the
- * filter is no longer a data leak.
+ * The `.eq("id", user.id)` is load-bearing, and it did not used to be.
+ *
+ * Originally the only SELECT policy on `profiles` was "you may read your own
+ * row", so this query could not return more than one result and the filter was
+ * genuinely redundant. Script 10 then added "Admins can view all profiles" —
+ * and for an admin this query started returning EVERY profile, at which point
+ * .single() fails with "multiple rows returned" and the profile silently
+ * becomes null. The visible symptom was "Welcome back, there." and admins being
+ * bounced out of /admin by requireStaff().
+ *
+ * The lesson: "RLS already narrows this" is a statement about the policies that
+ * exist today. Widening a policy later can turn a safe query into a broken one,
+ * so scope the query by hand as well.
  */
 export const getProfile = cache(async (): Promise<Profile | null> => {
   const user = await getUser();
@@ -80,8 +101,89 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
   const supabase = await createClient();
   const { data } = await supabase
     .from("profiles")
-    .select("id, email, legal_name, date_of_birth, sex, residence, phone")
+    .select("id, email, legal_name, date_of_birth, sex, residence, phone, role")
+    .eq("id", user.id)
     .single();
 
   return data as Profile | null;
+});
+
+/** Logged-out visitors are treated as clients — they can see nothing either way. */
+export async function getRole(): Promise<Role> {
+  const profile = await getProfile();
+  return profile?.role ?? "client";
+}
+
+/** Everyone who works the clinic side. Doctors are staff, per the role design. */
+export function isClinicSide(role: Role): boolean {
+  return role === "staff" || role === "doctor" || role === "admin";
+}
+
+/**
+ * Where a user belongs immediately after signing in.
+ *
+ * Staff and admin go straight to the Staff View — no button click, which is the
+ * whole point of the role. Clients keep the family portal.
+ */
+export function landingPathFor(role: Role): "/admin" | "/portal" {
+  return isClinicSide(role) ? "/admin" : "/portal";
+}
+
+/**
+ * Guard for the clinic-side area.
+ *
+ * Sends clients back to their own portal rather than showing a 403 — there's no
+ * reason to confirm to a family that a staff area exists.
+ *
+ * This is a convenience check, not the security boundary. Even if someone
+ * reached /admin, the RLS policies decide what the database will actually
+ * return, and the guard_appointment_update trigger decides what it will accept.
+ */
+export async function requireStaff(): Promise<Profile> {
+  await requireUser();
+  const profile = await getProfile();
+  if (!profile || !isClinicSide(profile.role)) redirect("/portal");
+  return profile;
+}
+
+/**
+ * Guard for master data — the doctor list, availability, and staff roles.
+ *
+ * Admin only. Staff and doctors get bounced to the clinic dashboard they do
+ * have access to. As always this is the convenient check, not the real one:
+ * the "Admins can update doctors" and "Admins can update all profiles"
+ * policies, plus the role rules in guard_profile_update, are what actually
+ * hold if someone calls the API directly.
+ */
+export async function requireAdmin(): Promise<Profile> {
+  const profile = await requireStaff();
+  if (profile.role !== "admin") redirect("/admin");
+  return profile;
+}
+
+/** A doctor's live clinic presence, as patients are allowed to see it. */
+export interface DoctorPresence {
+  doctor_id: string;
+  name: string;
+  specialty: string;
+  service_slug: string;
+  available_days: string[];
+  in_clinic: boolean;
+}
+
+/**
+ * Doctor list with live presence.
+ *
+ * Goes through the doctor_presence() function rather than reading `doctors`
+ * directly, because that function returns a boolean instead of the underlying
+ * last_seen_at timestamp — patients get "here or not", not a minute-by-minute
+ * record of when each clinician arrives, breaks, and leaves.
+ */
+export const getDoctorPresence = cache(async (): Promise<DoctorPresence[]> => {
+  const user = await getUser();
+  if (!user) return []; // the function is granted to authenticated only
+
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("doctor_presence");
+  return (data ?? []) as DoctorPresence[];
 });

@@ -32,10 +32,13 @@ export interface BookedSlot {
  * week's Monday 9:00 AM cell indefinitely.
  */
 export function WeeklyTimetable({
+  today,
   week,
   mine,
   booked,
 }: {
+  /** YYYY-MM-DD. Comes from the server so both sides agree on "today". */
+  today: string;
   week: WeekColumn[];
   mine: TimetableEntry[];
   booked: BookedSlot[];
@@ -74,9 +77,23 @@ export function WeeklyTimetable({
                 scope="col"
                 className="border-b border-border p-3 text-left text-xs font-semibold tracking-wide text-navy-900 uppercase"
               >
-                {column.day.slice(0, 3)}
-                <span className="mt-0.5 block text-[0.65rem] font-normal normal-case text-slate-400">
+                <span
+                  className={cn(
+                    column.date === today && "text-brand-blue-700"
+                  )}
+                >
+                  {column.day.slice(0, 3)}
+                </span>
+                <span
+                  className={cn(
+                    "mt-0.5 block text-[0.65rem] font-normal normal-case",
+                    column.date === today
+                      ? "font-medium text-brand-blue-700"
+                      : "text-slate-400"
+                  )}
+                >
                   {formatShortDate(column.date)}
+                  {column.date === today && " · Today"}
                 </span>
               </th>
             ))}
@@ -93,20 +110,47 @@ export function WeeklyTimetable({
               </th>
               {week.map((column) => {
                 const { status, appointment } = cellFor(column.date, time);
+                const isToday = column.date === today;
+
+                // The rolling window can include a Sunday, when the clinic is
+                // shut. Showing those slots as "Available" would invite bookings
+                // the no_sunday database constraint would reject anyway.
+                if (column.isClosed) {
+                  return (
+                    <td key={column.date} className="p-1.5 align-top">
+                      <div
+                        role="img"
+                        aria-label={`${column.day} ${time}: clinic closed`}
+                        className="flex min-h-14 items-center justify-center rounded-full bg-slate-50 text-xs text-slate-300"
+                      >
+                        Closed
+                      </div>
+                    </td>
+                  );
+                }
+
                 return (
                   <td key={column.date} className="p-1.5 align-top">
                     <div
                       role="img"
                       aria-label={
                         status === "yours" && appointment
-                          ? `${column.day} ${time}: your ${appointment.serviceLabel} appointment`
+                          ? `${column.day} ${time}: your ${appointment.serviceLabel} appointment${isToday ? ", today" : ""}`
                           : status === "occupied"
                             ? `${column.day} ${time}: occupied`
                             : `${column.day} ${time}: available`
                       }
                       className={cn(
-                        "flex min-h-14 flex-col justify-center rounded-lg px-2.5 py-1.5 text-xs",
-                        status === "yours" && "bg-brand-blue-600 text-white shadow-sm",
+                        "flex min-h-14 flex-col justify-center rounded-full px-3 py-2 text-xs",
+                        // Today's own appointments are the thing a family is
+                        // most likely to be looking for, so they get the only
+                        // saturated colour on the grid. Every other day of
+                        // theirs is grey — still clearly "yours", but visually
+                        // out of the way.
+                        status === "yours" &&
+                          (isToday
+                            ? "bg-brand-blue-600 text-white shadow-sm"
+                            : "bg-slate-200 text-slate-700"),
                         status === "occupied" && "bg-ice-50 text-slate-400",
                         status === "available" &&
                           "border border-dashed border-border text-slate-300"
@@ -116,7 +160,7 @@ export function WeeklyTimetable({
                         <>
                           <span className="flex items-center gap-1 font-semibold">
                             <CalendarCheck2 className="size-3 shrink-0" />
-                            Yours
+                            {isToday ? "Today" : "Yours"}
                           </span>
                           <span className="mt-0.5 leading-tight">
                             {appointment.serviceLabel}

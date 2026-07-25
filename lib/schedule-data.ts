@@ -58,10 +58,23 @@ export function dateToWeekDay(dateStr: string): WeekDay | null {
 }
 
 export interface WeekColumn {
-  day: WeekDay;
+  /** Full day name. May be "Sunday", which WeekDay excludes. */
+  day: string;
   /** YYYY-MM-DD — the actual calendar date this column represents. */
   date: string;
+  /** Sunday — the clinic is shut, so the column renders as unbookable. */
+  isClosed: boolean;
 }
+
+const ALL_DAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
 
 /** Local-time YYYY-MM-DD. Avoids toISOString(), which shifts to UTC and can
  *  hand back yesterday's date for anyone west of Greenwich. */
@@ -83,16 +96,36 @@ export function toISODate(date: Date): string {
  * Called on the server and passed down as props, so server and client always
  * agree on what "this week" means.
  */
-export function currentWeekColumns(today: Date = new Date()): WeekColumn[] {
-  const dayOfWeek = today.getDay(); // 0 = Sunday … 6 = Saturday
-  const monday = new Date(today);
-  // The clinic is closed Sunday, so on a Sunday show the week that starts
-  // tomorrow rather than the one that just ended.
-  monday.setDate(today.getDate() - (dayOfWeek === 0 ? -1 : dayOfWeek - 1));
-
-  return weekDays.map((day, index) => {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + index);
-    return { day, date: toISODate(date) };
+/**
+ * A rolling window of days starting today.
+ *
+ * Replaces the old fixed Monday–Saturday grid, which had a real problem: on a
+ * Saturday it showed Mon–Sat of a week that was already over, so an appointment
+ * two days out simply had no column to appear in. Anchoring the first column to
+ * today means the next week of the schedule is always on screen, and days that
+ * have passed drop off by themselves.
+ *
+ * Dates are built from year/month/day parts rather than by adding milliseconds,
+ * so the sequence stays correct across month ends and daylight-saving changes.
+ *
+ * Called on the server and passed down as props, so both sides agree on which
+ * day is "today".
+ */
+export function rollingColumns(
+  from: Date = new Date(),
+  count = 7
+): WeekColumn[] {
+  return Array.from({ length: count }, (_, offset) => {
+    const date = new Date(
+      from.getFullYear(),
+      from.getMonth(),
+      from.getDate() + offset
+    );
+    const dayOfWeek = date.getDay(); // 0 = Sunday
+    return {
+      day: ALL_DAY_NAMES[dayOfWeek],
+      date: toISODate(date),
+      isClosed: dayOfWeek === 0,
+    };
   });
 }

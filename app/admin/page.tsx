@@ -1,0 +1,167 @@
+import type { Metadata } from "next";
+
+import { SiteHeader } from "@/components/layout/site-header";
+import { SiteFooter } from "@/components/layout/site-footer";
+import { AdminBody, type StaffAppointmentRow } from "@/components/admin/admin-body";
+import type { StaffSlotEntry } from "@/components/admin/staff-timetable";
+import type { AppointmentStatus } from "@/components/portal/appointment-list";
+import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
+import { getDoctorPresence, requireStaff } from "@/lib/dal";
+import { rollingColumns, toISODate } from "@/lib/schedule-data";
+import { slotTimeToLabel } from "@/lib/slots";
+import { createClient } from "@/lib/supabase/server";
+import { serviceLabel } from "@/lib/validation";
+
+export const metadata: Metadata = {
+  title: "Staff — QuickStart Clinic",
+  description: "Confirm and manage appointment requests.",
+  // Keep the staff area out of search results.
+  robots: { index: false, follow: false },
+};
+
+export const dynamic = "force-dynamic";
+
+interface StaffRecord {
+  id: string;
+  service: string;
+  scheduled_date: string;
+  slot_time: string;
+  status: AppointmentStatus;
+  patient_name: string;
+  patient_dob: string | null;
+  patient_age: number | null;
+  guardian_name: string;
+  contact_phone: string;
+  contact_email: string;
+  notes: string | null;
+  user_id: string | null;
+  doctors: { name: string } | { name: string }[] | null;
+}
+
+function doctorName(record: StaffRecord): string {
+  const { doctors } = record;
+  if (!doctors) return "To be assigned";
+  return Array.isArray(doctors) ? (doctors[0]?.name ?? "To be assigned") : doctors.name;
+}
+
+/** "Age 12" or "DOB 2014-04-09" — whichever the family provided. */
+function patientDetail(record: StaffRecord): string {
+  if (record.patient_age !== null) return `age ${record.patient_age}`;
+  if (record.patient_dob) return `b. ${record.patient_dob}`;
+  return "age not given";
+}
+
+export default async function AdminPage() {
+  // Redirects non-staff to /portal. The RLS policies and the status trigger are
+  // what actually enforce this — the guard just avoids rendering the page.
+  const profile = await requireStaff();
+
+  const supabase = await createClient();
+  const today = toISODate(new Date());
+  const doctors = await getDoctorPresence();
+
+  // No .eq() filter: the "Staff can view all appointments" policy widens what
+  // this same query returns. Run it as a patient and you'd get only your own
+  // rows back — the SQL doesn't change, the policy does.
+  const { data } = await supabase
+    .from("appointments")
+    .select(
+      "id, service, scheduled_date, slot_time, status, patient_name, patient_dob, patient_age, guardian_name, contact_phone, contact_email, notes, user_id, doctors(name)"
+    )
+    .order("scheduled_date", { ascending: true })
+    .order("slot_time", { ascending: true });
+
+  const records = (data ?? []) as unknown as StaffRecord[];
+  const week = rollingColumns();
+  const weekStart = week[0].date;
+  const weekEnd = week[week.length - 1].date;
+
+  // The week grid, with names — staff are authorised to see who is booked.
+  const slots: StaffSlotEntry[] = records.flatMap((record) => {
+    if (record.scheduled_date < weekStart || record.scheduled_date > weekEnd) {
+      return [];
+    }
+    const time = slotTimeToLabel(record.slot_time);
+    if (!time) return [];
+    return [
+      {
+        id: record.id,
+        date: record.scheduled_date,
+        time,
+        patientName: record.patient_name,
+        serviceLabel: serviceLabel(record.service),
+        doctorName: doctorName(record),
+        status: record.status,
+        // No account attached — recorded by staff from a call or the desk.
+        phoneBooking: record.user_id === null,
+      },
+    ];
+  });
+
+  const rows: StaffAppointmentRow[] = records.flatMap((record) => {
+    const time = slotTimeToLabel(record.slot_time);
+    if (!time) return [];
+    return [
+      {
+        id: record.id,
+        patientName: record.patient_name,
+        patientDetail: patientDetail(record),
+        guardianName: record.guardian_name,
+        contactPhone: record.contact_phone,
+        contactEmail: record.contact_email,
+        serviceLabel: serviceLabel(record.service),
+        doctorName: doctorName(record),
+        date: record.scheduled_date,
+        time,
+        status: record.status,
+        notes: record.notes,
+      },
+    ];
+  });
+
+  // "Who is booked today" — the roll-call staff and admin use to check people in.
+  const todayRows = rows
+    .filter((row) => row.date === today && row.status !== "cancelled")
+    .sort((a, b) => a.time.localeCompare(b.time));
+
+  const pending = rows.filter((row) => row.status === "pending");
+  const upcoming = rows.filter(
+    (row) => row.status === "approved" && row.date >= today
+  );
+  const past = rows.filter(
+    (row) =>
+      row.status === "completed" ||
+      row.status === "cancelled" ||
+      (row.status === "approved" && row.date < today)
+  );
+
+  return (
+    <div className="flex min-h-svh flex-col">
+      {/* Only doctors drive the "in clinic" indicator, so only they beat.
+          Mounted here because /admin is where a doctor spends their day. */}
+      {profile.role === "doctor" && <PresenceHeartbeat />}
+
+      <SiteHeader />
+
+      {/* Plain white, matching the portal and the landing page. */}
+      <main className="flex-1">
+        <div className="container-clinic py-16 lg:py-20">
+          <AdminBody
+            staffName={profile.legal_name}
+            role={profile.role}
+            todayDate={today}
+            doctors={doctors}
+            week={week}
+            slots={slots}
+            today={todayRows}
+            pending={pending}
+            upcoming={upcoming}
+            past={past}
+          />
+        </div>
+      </main>
+
+      <SiteFooter />
+    </div>
+  );
+}

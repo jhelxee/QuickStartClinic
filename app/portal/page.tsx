@@ -5,8 +5,10 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { PortalBody } from "@/components/portal/portal-body";
 import type { AppointmentRow, AppointmentStatus } from "@/components/portal/appointment-list";
 import type { BookedSlot, TimetableEntry } from "@/components/portal/weekly-timetable";
-import { getProfile, requireUser } from "@/lib/dal";
-import { currentWeekColumns, toISODate } from "@/lib/schedule-data";
+import { redirect } from "next/navigation";
+
+import { getDoctorPresence, getProfile, isClinicSide, requireUser } from "@/lib/dal";
+import { rollingColumns, toISODate } from "@/lib/schedule-data";
 import { slotTimeToLabel } from "@/lib/slots";
 import { createClient } from "@/lib/supabase/server";
 import { serviceLabel } from "@/lib/validation";
@@ -46,25 +48,71 @@ function doctorName(record: AppointmentRecord): string {
   return Array.isArray(doctors) ? (doctors[0]?.name ?? "To be assigned") : doctors.name;
 }
 
-export default async function PortalPage() {
+export default async function PortalPage({
+  searchParams,
+}: {
+  // Next 16: searchParams is a Promise and must be awaited.
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   // proxy.ts already redirected logged-out visitors, but this page checks for
   // itself rather than trusting that. Defense in depth is the whole point.
-  await requireUser();
+  const user = await requireUser();
   const profile = await getProfile();
+  const { family } = await searchParams;
+
+  const clinicSide = profile ? isClinicSide(profile.role) : false;
+
+  // Clinic-side roles get the Staff/Administrator UI by default — no manual
+  // switching, however they arrive: login, a bookmark, a stale link, or
+  // proxy.ts bouncing them off a protected route.
+  //
+  // ?family=1 is the deliberate exception. Staff and doctors are often parents
+  // at this clinic themselves, and a blanket redirect left them no way to see
+  // their own children's appointments. Getting here takes an explicit click on
+  // "My family" in the Staff UI, so the default never changes and nobody lands
+  // on the client view by accident.
+  const familyView = family === "1";
+  if (clinicSide && !familyView) redirect("/admin");
 
   const supabase = await createClient();
-  const week = currentWeekColumns();
+  // A rolling window starting today, not a Mon–Sat calendar week. On a Saturday
+  // the old grid showed a week that had already finished, so an appointment two
+  // days away had no column to appear in.
+  const week = rollingColumns();
   const weekStart = week[0].date;
   const weekEnd = week[week.length - 1].date;
-  const today = toISODate(new Date());
+  const now = new Date();
+  const today = toISODate(now);
 
-  // Note: no .eq("user_id", ...) anywhere below. The RLS policy on this table
-  // already restricts every read to the caller's own rows, so forgetting the
-  // filter is no longer a way to leak data.
+  // Finished and past appointments stay visible for a week before dropping off,
+  // so a family can still see the visit they had on Tuesday.
+  //
+  // Built from date parts rather than subtracting milliseconds: arithmetic on
+  // the day component rolls months and years correctly and is unaffected by
+  // daylight-saving shifts, where a fixed 7 * 24h can land on the wrong date.
+  const RETENTION_DAYS = 7;
+  const retentionStart = toISODate(
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() - RETENTION_DAYS)
+  );
+  const fetchFrom = retentionStart < weekStart ? retentionStart : weekStart;
+
+  // The .eq("user_id", user.id) is REQUIRED, and this file used to claim it
+  // wasn't. When only "Users can view own appointments" existed, RLS could not
+  // return anyone else's row and the filter was genuinely redundant.
+  //
+  // Script 08 then added "Staff can view all appointments". Permissive policies
+  // are OR'd, so for a staff, doctor, or admin account this same query started
+  // returning EVERY family's bookings — and the portal listed them all under
+  // "Your appointments". A real privacy leak, produced by adding a policy
+  // somewhere else entirely.
+  //
+  // RLS is a floor, not a substitute for asking the right question. Scope the
+  // query to what this screen is supposed to show, and let RLS be the backstop.
   const { data: records } = await supabase
     .from("appointments")
     .select("id, service, scheduled_date, slot_time, status, patient_name, doctors(name)")
-    .gte("scheduled_date", weekStart < today ? weekStart : today)
+    .eq("user_id", user.id)
+    .gte("scheduled_date", fetchFrom)
     .order("scheduled_date", { ascending: true })
     .order("slot_time", { ascending: true });
 
@@ -91,10 +139,11 @@ export default async function PortalPage() {
       ];
     });
 
-  // The list: everything from today forward, cancellations included so families
-  // can see what happened to a booking.
-  const upcoming: AppointmentRow[] = mine
-    .filter((r) => r.scheduled_date >= today)
+  // The list: everything from a week ago forward. Completed and cancelled
+  // visits stay on the page for RETENTION_DAYS rather than vanishing the moment
+  // they're done, then age out on their own.
+  const listed: AppointmentRow[] = mine
+    .filter((r) => r.scheduled_date >= retentionStart)
     .flatMap((r) => {
       const time = slotTimeToLabel(r.slot_time);
       if (!time) return [];
@@ -110,6 +159,13 @@ export default async function PortalPage() {
         },
       ];
     });
+
+  // Upcoming first (soonest at the top), then recent visits newest-first. Plain
+  // chronological order would bury next week's appointment under last week's.
+  const upcoming: AppointmentRow[] = [
+    ...listed.filter((row) => row.date >= today),
+    ...listed.filter((row) => row.date < today).reverse(),
+  ];
 
   // Occupied slots across the whole clinic. This goes through a security definer
   // function because RLS (correctly) hides other families' rows from a direct
@@ -127,15 +183,23 @@ export default async function PortalPage() {
   });
 
   const firstName = (profile?.legal_name ?? "there").split(" ")[0];
+  const doctors = await getDoctorPresence();
 
   return (
     <div className="flex min-h-svh flex-col">
       <SiteHeader />
 
-      <main className="flex-1 bg-ice-50">
+      {/* brand-blue-50 — the same pale blue used as the accent token elsewhere
+          in the design system, rather than a one-off colour. Cards keep their
+          own white background and border, so they still read as distinct
+          surfaces against it. */}
+      <main className="flex-1 bg-brand-blue-50">
         <div className="container-clinic py-16 lg:py-20">
           <PortalBody
+            today={today}
             firstName={firstName}
+            showBackToStaff={clinicSide}
+            doctors={doctors}
             week={week}
             timetableEntries={timetableEntries}
             bookedSlots={bookedSlots}
