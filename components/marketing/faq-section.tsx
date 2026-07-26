@@ -1,9 +1,12 @@
+import Link from "next/link";
+
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { BlobMotif } from "@/components/marketing/blob-motif";
 
 const faqs = [
   {
@@ -40,32 +43,38 @@ const faqs = [
 
 export function FaqSection() {
   return (
-    <section id="faq" className="bg-navy-900 py-24">
-      <div className="container-clinic grid gap-12 lg:grid-cols-[0.7fr_1.3fr]">
+    <section id="faq" className="relative overflow-hidden bg-white py-24">
+      <BlobMotif tone="light" className="-top-24 -left-32 h-[380px] w-[380px]" />
+
+      <div className="container-clinic relative grid gap-12 lg:grid-cols-[0.7fr_1.3fr]">
         <div className="max-w-md">
-          <span className="text-sm font-semibold tracking-wide text-brand-blue-400 uppercase">
+          <span className="text-sm font-semibold tracking-wide text-brand-blue-700 uppercase">
             Good to know
           </span>
-          <h2 className="mt-3 font-display text-3xl font-medium text-white sm:text-4xl">
+          <h2 className="mt-3 font-display text-3xl font-medium text-navy-900 sm:text-4xl">
             Questions families ask before their first visit.
           </h2>
-          <p className="mt-4 text-base leading-relaxed text-white/70">
-            Don&apos;t see your question here? Reach our care coordination
-            team directly and we&apos;ll answer before you book.
+          <p className="mt-4 text-base leading-relaxed text-slate-700">
+            Don&apos;t see your question here?{" "}
+            <Link
+              href="/#contact"
+              className="font-semibold text-brand-blue-700 hover:text-brand-blue-600"
+            >
+              Send our care coordination team a message
+            </Link>{" "}
+            and we&apos;ll answer before you book.
           </p>
         </div>
 
         <Accordion
           type="single"
           collapsible
-          className="rounded-2xl border border-white/10 bg-white/[0.06] px-6 backdrop-blur-sm sm:px-8"
+          className="rounded-2xl border border-border bg-ice-50 px-6 sm:px-8"
         >
           {faqs.map((faq) => (
-            <AccordionItem key={faq.question} value={faq.question} className="border-white/10">
-              <AccordionTrigger className="text-white hover:text-brand-blue-400">
-                {faq.question}
-              </AccordionTrigger>
-              <AccordionContent className="text-white/70">{faq.answer}</AccordionContent>
+            <AccordionItem key={faq.question} value={faq.question}>
+              <AccordionTrigger>{faq.question}</AccordionTrigger>
+              <AccordionContent>{faq.answer}</AccordionContent>
             </AccordionItem>
           ))}
         </Accordion>

@@ -212,6 +212,30 @@ export type StaffAppointmentValues = z.infer<typeof staffAppointmentSchema>;
  * Cross-field check kept outside the schema for the same reason as
  * checkPasswordsMatch above — see appointment-form.tsx.
  */
+// ---------------------------------------------------------------------------
+// Contact / inquiry form
+// ---------------------------------------------------------------------------
+
+export const contactSchema = z.object({
+  name: z.string().trim().min(2, "Enter your name"),
+  email: emailField,
+  phone: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      (value) => !value || PHONE_ALLOWED_CHARS.test(value),
+      "Enter a valid phone number"
+    ),
+  message: z
+    .string()
+    .trim()
+    .min(10, "Tell us a little more — at least 10 characters")
+    .max(1000, "Keep your message under 1000 characters"),
+});
+
+export type ContactValues = z.infer<typeof contactSchema>;
+
 export function checkPatientInfo(values: {
   patientInfoType: "dob" | "age";
   patientDob?: string;

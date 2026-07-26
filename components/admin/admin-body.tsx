@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, Database, Inbox, Users } from "lucide-react";
+import { CalendarDays, Database, Inbox, Mail, Users } from "lucide-react";
 
 import { AppointmentActions } from "@/components/admin/appointment-actions";
 import { StaffBookingForm } from "@/components/admin/staff-booking-form";
@@ -55,6 +55,7 @@ export function AdminBody({
   pending,
   upcoming,
   past,
+  newInquiriesCount,
 }: {
   staffName: string;
   role: Role;
@@ -67,6 +68,7 @@ export function AdminBody({
   pending: StaffAppointmentRow[];
   upcoming: StaffAppointmentRow[];
   past: StaffAppointmentRow[];
+  newInquiriesCount: number;
 }) {
   const isAdmin = role === "admin";
 
@@ -92,6 +94,18 @@ export function AdminBody({
               parents here too, and without it they had no way to see their own
               children's appointments. The ?family=1 flag is what tells /portal
               to render instead of redirecting back. */}
+          <Button variant="outline" size="lg" asChild>
+            <Link href="/admin/inquiries">
+              <Mail className="size-4" />
+              Messages
+              {newInquiriesCount > 0 && (
+                <span className="rounded-full bg-navy-900 px-2 py-0.5 text-xs font-medium text-white">
+                  {newInquiriesCount}
+                </span>
+              )}
+            </Link>
+          </Button>
+
           <Button variant="outline" size="lg" asChild>
             <Link href="/portal?family=1">
               <CalendarDays className="size-4" />

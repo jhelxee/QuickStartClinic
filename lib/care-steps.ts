@@ -20,12 +20,22 @@ export interface CareStep {
   description: string;
 }
 
+export interface ServiceImage {
+  src: string;
+  /** Intrinsic pixel size — required by next/image even when displayed
+   *  smaller via CSS, so it can reason about aspect ratio and srcset sizes. */
+  width: number;
+  height: number;
+  alt: string;
+}
+
 export interface ServiceCareInfo {
   /** Matches serviceOptions in lib/validation.ts and doctors.service_slug. */
   slug: "developmental-pediatrician" | "speech-therapy" | "occupational-therapy";
   icon: LucideIcon;
   title: string;
   description: string;
+  image: ServiceImage;
   points: string[];
   /** Illustrative only — actual visit length varies by child. */
   duration: string;
@@ -45,6 +55,12 @@ export const careInfo: ServiceCareInfo[] = [
     title: "Developmental Pediatrician",
     description:
       "Comprehensive developmental evaluations and ongoing medical guidance for delays in motor skills, language, behavior, and social-emotional growth.",
+    image: {
+      src: "/images/services/developmental-pediatrician.jpg",
+      width: 2560,
+      height: 1706,
+      alt: "A developmental pediatrician smiling with a laughing baby during a check-up",
+    },
     points: ["Diagnostic evaluations", "Growth & milestone tracking", "Coordinated referrals"],
     duration: "First visits typically run about 45–60 minutes",
     steps: [
@@ -86,6 +102,12 @@ export const careInfo: ServiceCareInfo[] = [
     title: "Speech Therapy",
     description:
       "Individualized therapy for articulation, language delay, fluency, and feeding — building the communication skills your child needs to be understood.",
+    image: {
+      src: "/images/services/speech-therapy.webp",
+      width: 1000,
+      height: 600,
+      alt: "A speech therapist showing alphabet flashcards to a young boy",
+    },
     points: ["Articulation & language", "Feeding & swallowing support", "AAC & communication tools"],
     duration: "First sessions typically run about 45–60 minutes",
     steps: [
@@ -126,6 +148,12 @@ export const careInfo: ServiceCareInfo[] = [
     title: "Occupational Therapy",
     description:
       "Hands-on support for fine motor skills, sensory processing, and everyday independence — from handwriting to getting dressed with confidence.",
+    image: {
+      src: "/images/services/occupational-therapy.jpg",
+      width: 505,
+      height: 379,
+      alt: "An occupational therapist playing a bead-maze game with a young boy",
+    },
     points: ["Sensory integration", "Fine & gross motor skills", "Everyday independence skills"],
     duration: "First sessions typically run about 45–60 minutes",
     steps: [

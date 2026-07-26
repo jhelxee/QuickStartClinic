@@ -3,9 +3,20 @@
 import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/dal";
+import { emailShell, sendEmail } from "@/lib/email";
 import { labelToSlotTime } from "@/lib/slots";
 import { createClient } from "@/lib/supabase/server";
-import { appointmentSchema, checkPatientInfo } from "@/lib/validation";
+import { appointmentSchema, checkPatientInfo, serviceLabel } from "@/lib/validation";
+
+/** "2026-07-25" -> "Saturday, July 25, 2026" */
+function formatLongDate(date: string) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 export interface ActionResult {
   error?: string;
@@ -85,6 +96,27 @@ export async function createAppointment(values: unknown): Promise<ActionResult> 
     }
     return { error: "We couldn't save your appointment. Please try again." };
   }
+
+  // Best-effort only — the booking is already saved. sendEmail() never
+  // throws, so a Resend outage or a missing API key can't turn a successful
+  // booking into an error the family didn't cause.
+  await sendEmail({
+    to: v.email,
+    subject: "We received your appointment request — QuickStart Clinic",
+    html: emailShell(
+      "Appointment request received",
+      `<p style="margin:0 0 12px;color:#334155;line-height:1.6;">Hi ${v.guardianName.split(" ")[0]},</p>
+       <p style="margin:0 0 12px;color:#334155;line-height:1.6;">We've received your request for <strong>${serviceLabel(v.service)}</strong> for ${v.patientName}. Here's what you booked:</p>
+       <table role="presentation" width="100%" style="margin:16px 0;background:#f4f9fb;border-radius:12px;">
+         <tr><td style="padding:16px;color:#0b2a4a;">
+           <p style="margin:0 0 4px;"><strong>Date:</strong> ${formatLongDate(v.preferredDate)}</p>
+           <p style="margin:0 0 4px;"><strong>Time:</strong> ${v.preferredTime}</p>
+           <p style="margin:0;"><strong>Status:</strong> Pending confirmation</p>
+         </td></tr>
+       </table>
+       <p style="margin:0;color:#334155;line-height:1.6;">Our care coordination team will confirm this within one business day. You can check its status anytime from your family portal.</p>`
+    ),
+  });
 
   revalidatePath("/portal");
   return { success: true };

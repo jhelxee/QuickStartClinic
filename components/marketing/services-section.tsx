@@ -1,6 +1,8 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, ListChecks } from "lucide-react";
 
+import { BlobMotif } from "@/components/marketing/blob-motif";
 import {
   Card,
   CardContent,
@@ -12,16 +14,18 @@ import { careInfo } from "@/lib/care-steps";
 
 export function ServicesSection() {
   return (
-    <section id="services" className="bg-navy-900 py-24">
-      <div className="container-clinic">
+    <section id="services" className="relative overflow-hidden bg-white py-24">
+      <BlobMotif tone="light" className="-top-24 -right-32 h-[480px] w-[480px]" />
+
+      <div className="container-clinic relative">
         <div className="max-w-2xl">
-          <span className="text-sm font-semibold tracking-wide text-brand-blue-400 uppercase">
+          <span className="text-sm font-semibold tracking-wide text-brand-blue-700 uppercase">
             What we treat
           </span>
-          <h2 className="mt-3 font-display text-3xl font-medium text-white sm:text-4xl">
+          <h2 className="mt-3 font-display text-3xl font-medium text-navy-900 sm:text-4xl">
             Three specialties. One coordinated plan.
           </h2>
-          <p className="mt-4 text-lg leading-relaxed text-white/70">
+          <p className="mt-4 text-lg leading-relaxed text-slate-700">
             Every child&apos;s development is connected — so we built a clinic
             where your specialists talk to each other, not just to you.
           </p>
@@ -31,22 +35,39 @@ export function ServicesSection() {
           {careInfo.map((service) => (
             <Card
               key={service.title}
-              className="group border-white/10 bg-white/[0.06] backdrop-blur-sm transition-colors hover:bg-white/[0.09]"
+              className="group overflow-hidden border-border pt-0 shadow-sm transition-shadow hover:shadow-md"
             >
+              {/* Fixed aspect ratio + object-cover so all three crop
+                  consistently despite very different source resolutions. The
+                  gradient is a neutral black wash rather than a brand color —
+                  it grounds the photo's bottom edge regardless of what's
+                  around it, and softens how obvious the lower-resolution
+                  photos are next to the sharper one. */}
+              <div className="relative aspect-[4/3] w-full">
+                <Image
+                  src={service.image.src}
+                  alt={service.image.alt}
+                  fill
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                  className="object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/25 to-transparent" />
+              </div>
+
               <CardHeader>
-                <div className="flex size-12 items-center justify-center rounded-xl bg-brand-blue-600/20 text-brand-blue-400">
+                <div className="flex size-12 items-center justify-center rounded-xl bg-brand-blue-50 text-brand-blue-600">
                   <service.icon className="size-6" strokeWidth={1.75} />
                 </div>
-                <CardTitle className="mt-5 text-white">{service.title}</CardTitle>
-                <CardDescription className="text-base leading-relaxed text-white/70">
+                <CardTitle className="mt-5">{service.title}</CardTitle>
+                <CardDescription className="text-base leading-relaxed text-slate-700">
                   {service.description}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ul className="flex flex-col gap-2 border-t border-white/10 pt-5 text-sm text-white/70">
+                <ul className="flex flex-col gap-2 border-t border-border pt-5 text-sm text-slate-700">
                   {service.points.map((point) => (
                     <li key={point} className="flex items-center gap-2">
-                      <span className="size-1 rounded-full bg-brand-blue-400" />
+                      <span className="size-1 rounded-full bg-brand-blue-600" />
                       {point}
                     </li>
                   ))}
@@ -57,16 +78,16 @@ export function ServicesSection() {
                     room to breathe than packed into this card. */}
                 <Link
                   href={`/what-to-expect/${service.slug}`}
-                  className="mt-5 flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white transition-colors hover:border-brand-blue-400/40 hover:bg-white/[0.08]"
+                  className="mt-5 flex items-center gap-3 rounded-xl border border-border bg-ice-50 px-4 py-3 text-sm font-semibold text-navy-900 transition-colors hover:border-brand-blue-600/40 hover:bg-brand-blue-50"
                 >
-                  <ListChecks className="size-4 shrink-0 text-brand-blue-400" />
+                  <ListChecks className="size-4 shrink-0 text-brand-blue-600" />
                   <span className="flex-1">See what a visit typically looks like</span>
-                  <ArrowRight className="size-4 shrink-0 text-white/40 transition-colors group-hover:text-brand-blue-300" />
+                  <ArrowRight className="size-4 shrink-0 text-slate-300 transition-colors group-hover:text-brand-blue-600" />
                 </Link>
 
                 <Link
                   href="/appointment"
-                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-blue-400 transition-colors group-hover:text-brand-blue-300"
+                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-blue-600 transition-colors group-hover:text-brand-blue-700"
                 >
                   Book this service
                   <ArrowUpRight className="size-4" />

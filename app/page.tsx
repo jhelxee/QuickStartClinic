@@ -2,6 +2,7 @@ import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { Hero } from "@/components/marketing/hero";
 import { ServicesSection } from "@/components/marketing/services-section";
+import { TeamSection } from "@/components/marketing/team-section";
 import { TrustSection } from "@/components/marketing/trust-section";
 import { TestimonialsSection } from "@/components/marketing/testimonials-section";
 import { FaqSection } from "@/components/marketing/faq-section";
@@ -20,6 +21,7 @@ export default async function Home() {
       <main className="flex-1">
         <Hero presence={presence} />
         <ServicesSection />
+        <TeamSection presence={presence} />
         <TrustSection />
         <TestimonialsSection />
         <FaqSection />

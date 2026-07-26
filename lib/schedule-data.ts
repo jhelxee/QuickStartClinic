@@ -28,22 +28,30 @@ export const officeHours: { day: string; hours: string }[] = [
  */
 export const doctorSchedule: {
   name: string;
+  credential: string;
   specialty: string;
+  bio: string;
   days: WeekDay[];
 }[] = [
   {
     name: "Dr. Chen",
+    credential: "MD, Developmental-Behavioral Pediatrics",
     specialty: "Developmental Pediatrician",
+    bio: "Twelve years guiding families through evaluations and milestones, with a focus on unhurried, whole-child assessments over rushed checklists.",
     days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
   },
   {
     name: "Ms. Alvarez",
+    credential: "M.S., CCC-SLP",
     specialty: "Speech Therapy",
+    bio: "Specializes in early language delay and feeding therapy, building communication tools that fit into a family's daily routine, not around it.",
     days: ["Monday", "Wednesday", "Friday"],
   },
   {
     name: "Mr. Boone",
+    credential: "OTR/L",
     specialty: "Occupational Therapy",
+    bio: "Works through play — sensory integration and fine motor skills — toward the everyday confidence of getting dressed, writing, and eating independently.",
     days: ["Tuesday", "Thursday", "Saturday"],
   },
 ];

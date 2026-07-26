@@ -1,5 +1,6 @@
 import { Quote } from "lucide-react";
 
+import { BlobMotif } from "@/components/marketing/blob-motif";
 import { Card, CardContent } from "@/components/ui/card";
 
 const testimonials = [
@@ -25,31 +26,30 @@ const testimonials = [
 
 export function TestimonialsSection() {
   return (
-    <section id="testimonials" className="bg-navy-900 py-24">
-      <div className="container-clinic">
+    <section id="testimonials" className="relative overflow-hidden bg-white py-24">
+      <BlobMotif tone="light" className="-bottom-40 -left-24 h-[420px] w-[420px]" />
+
+      <div className="container-clinic relative">
         <div className="max-w-2xl">
-          <span className="text-sm font-semibold tracking-wide text-brand-blue-400 uppercase">
+          <span className="text-sm font-semibold tracking-wide text-brand-blue-700 uppercase">
             Families &amp; caregivers
           </span>
-          <h2 className="mt-3 font-display text-3xl font-medium text-white sm:text-4xl">
+          <h2 className="mt-3 font-display text-3xl font-medium text-navy-900 sm:text-4xl">
             What it feels like from the waiting room.
           </h2>
         </div>
 
         <div className="mt-14 grid gap-6 lg:grid-cols-3">
           {testimonials.map((testimonial) => (
-            <Card
-              key={testimonial.name}
-              className="border-white/10 bg-white/[0.06] backdrop-blur-sm"
-            >
+            <Card key={testimonial.name} className="border-border shadow-sm">
               <CardContent className="flex h-full flex-col justify-between gap-6">
-                <Quote className="size-7 text-brand-blue-400" strokeWidth={1.5} />
-                <p className="text-base leading-relaxed text-white/70">
+                <Quote className="size-7 text-brand-blue-600" strokeWidth={1.5} />
+                <p className="text-base leading-relaxed text-slate-700">
                   &ldquo;{testimonial.quote}&rdquo;
                 </p>
-                <div className="border-t border-white/10 pt-4">
-                  <p className="text-sm font-semibold text-white">{testimonial.name}</p>
-                  <p className="text-xs text-white/50">{testimonial.context}</p>
+                <div className="border-t border-border pt-4">
+                  <p className="text-sm font-semibold text-navy-900">{testimonial.name}</p>
+                  <p className="text-xs text-slate-400">{testimonial.context}</p>
                 </div>
               </CardContent>
             </Card>

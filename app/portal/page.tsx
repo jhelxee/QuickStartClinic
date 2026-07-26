@@ -56,9 +56,15 @@ export default async function PortalPage({
 }) {
   // proxy.ts already redirected logged-out visitors, but this page checks for
   // itself rather than trusting that. Defense in depth is the whole point.
-  const user = await requireUser();
-  const profile = await getProfile();
-  const { family } = await searchParams;
+  //
+  // requireUser() and getProfile() each start with getUser() — but getUser()
+  // is wrapped in React's cache(), so running them concurrently still costs
+  // only one real Supabase round trip, not two.
+  const [user, profile, { family }] = await Promise.all([
+    requireUser(),
+    getProfile(),
+    searchParams,
+  ]);
 
   const clinicSide = profile ? isClinicSide(profile.role) : false;
 
@@ -108,13 +114,26 @@ export default async function PortalPage({
   //
   // RLS is a floor, not a substitute for asking the right question. Scope the
   // query to what this screen is supposed to show, and let RLS be the backstop.
-  const { data: records } = await supabase
-    .from("appointments")
-    .select("id, service, scheduled_date, slot_time, status, patient_name, doctors(name)")
-    .eq("user_id", user.id)
-    .gte("scheduled_date", fetchFrom)
-    .order("scheduled_date", { ascending: true })
-    .order("slot_time", { ascending: true });
+  //
+  // This, the booked-slots RPC below, and the doctor presence RPC don't depend
+  // on each other's results — they used to run one after another, turning three
+  // round trips to Supabase into three round trips' worth of wait time. Firing
+  // them together costs roughly what the slowest single one costs.
+  const [{ data: records }, { data: bookedRaw }, doctors] = await Promise.all([
+    supabase
+      .from("appointments")
+      .select("id, service, scheduled_date, slot_time, status, patient_name, doctors(name)")
+      .eq("user_id", user.id)
+      .gte("scheduled_date", fetchFrom)
+      .order("scheduled_date", { ascending: true })
+      .order("slot_time", { ascending: true }),
+    // Occupied slots across the whole clinic. This goes through a security
+    // definer function because RLS (correctly) hides other families' rows from
+    // a direct query. It returns date, time, and doctor id only — no names, no
+    // notes.
+    supabase.rpc("get_booked_slots", { from_date: weekStart, to_date: weekEnd }),
+    getDoctorPresence(),
+  ]);
 
   const mine = (records ?? []) as unknown as AppointmentRecord[];
 
@@ -167,14 +186,6 @@ export default async function PortalPage({
     ...listed.filter((row) => row.date < today).reverse(),
   ];
 
-  // Occupied slots across the whole clinic. This goes through a security definer
-  // function because RLS (correctly) hides other families' rows from a direct
-  // query. It returns date, time, and doctor id only — no names, no notes.
-  const { data: bookedRaw } = await supabase.rpc("get_booked_slots", {
-    from_date: weekStart,
-    to_date: weekEnd,
-  });
-
   const bookedSlots: BookedSlot[] = (
     (bookedRaw ?? []) as { slot_date: string; booked_time: string }[]
   ).flatMap((slot) => {
@@ -183,7 +194,6 @@ export default async function PortalPage({
   });
 
   const firstName = (profile?.legal_name ?? "there").split(" ")[0];
-  const doctors = await getDoctorPresence();
 
   return (
     <div className="flex min-h-svh flex-col">

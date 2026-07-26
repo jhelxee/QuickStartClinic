@@ -63,13 +63,23 @@ export default async function AdminPage() {
   // No .eq() filter: the "Staff can view all appointments" policy widens what
   // this same query returns. Run it as a patient and you'd get only your own
   // rows back — the SQL doesn't change, the policy does.
-  const { data } = await supabase
-    .from("appointments")
-    .select(
-      "id, service, scheduled_date, slot_time, status, patient_name, patient_dob, patient_age, guardian_name, contact_phone, contact_email, notes, user_id, doctors(name)"
-    )
-    .order("scheduled_date", { ascending: true })
-    .order("slot_time", { ascending: true });
+  //
+  // The unread-message count is independent of the appointments query, so it
+  // runs alongside it rather than after it — same reasoning as the parallel
+  // fetch in app/portal/page.tsx.
+  const [{ data }, { count: newInquiriesCount }] = await Promise.all([
+    supabase
+      .from("appointments")
+      .select(
+        "id, service, scheduled_date, slot_time, status, patient_name, patient_dob, patient_age, guardian_name, contact_phone, contact_email, notes, user_id, doctors(name)"
+      )
+      .order("scheduled_date", { ascending: true })
+      .order("slot_time", { ascending: true }),
+    supabase
+      .from("contact_inquiries")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "new"),
+  ]);
 
   const records = (data ?? []) as unknown as StaffRecord[];
   const week = rollingColumns();
@@ -157,6 +167,7 @@ export default async function AdminPage() {
             pending={pending}
             upcoming={upcoming}
             past={past}
+            newInquiriesCount={newInquiriesCount ?? 0}
           />
         </div>
       </main>
