@@ -37,11 +37,17 @@ const ROLE_STYLES: Record<Role, string> = {
   admin: "bg-amber-50 text-amber-700 ring-amber-600/20",
 };
 
+// Doctor is deliberately excluded — it's granted by linking an account in
+// Master Data → Doctors, not chosen from this list. ROLE_LABELS/ROLE_STYLES
+// above still cover it, since a doctor's current role still needs to display
+// here, just not be settable.
+const ASSIGNABLE_ROLES: Role[] = ["client", "staff", "admin"];
+
 export function StaffAccessTable({ people }: { people: AccessRow[] }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border bg-white">
+    <div className="max-h-[480px] overflow-auto rounded-2xl border border-border bg-white">
       <table className="w-full min-w-[640px] border-collapse text-sm">
-        <thead>
+        <thead className="sticky top-0 z-10 bg-white">
           <tr className="border-b border-border">
             <th scope="col" className="p-4 text-left text-xs font-semibold tracking-wide text-slate-400 uppercase">
               Name
@@ -106,6 +112,13 @@ function AccessRowItem({ person }: { person: AccessRow }) {
           <span className="text-xs text-slate-400">
             Ask another admin to change your role
           </span>
+        ) : person.role === "doctor" ? (
+          // Doctor isn't settable from here at all — see setUserRole, which
+          // rejects it server-side too. Unlinking them in Master Data →
+          // Doctors is what actually reverts this to Client.
+          <span className="text-xs text-slate-400">
+            Managed in Master Data → Doctors
+          </span>
         ) : (
           <div className="flex items-center gap-2">
             <Select value={person.role} onValueChange={change} disabled={isPending}>
@@ -113,7 +126,7 @@ function AccessRowItem({ person }: { person: AccessRow }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(Object.keys(ROLE_LABELS) as Role[]).map((role) => (
+                {ASSIGNABLE_ROLES.map((role) => (
                   <SelectItem key={role} value={role}>
                     {ROLE_LABELS[role]}
                   </SelectItem>

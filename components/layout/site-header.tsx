@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Mail } from "lucide-react";
 import { toast } from "sonner";
 
 import { Logo } from "@/components/layout/logo";
@@ -19,7 +20,19 @@ const navLinks = [
   { href: "/#visit", label: "Visit Us" },
 ];
 
-export function SiteHeader({ variant = "light" }: { variant?: "light" | "dark" }) {
+export function SiteHeader({
+  variant = "light",
+  newMessagesCount,
+}: {
+  variant?: "light" | "dark";
+  /**
+   * Unread contact-form message count. Only ever passed by /admin/* pages —
+   * everywhere else it's simply omitted, so the badge cannot render for a
+   * patient no matter what: there's no state to hide, only a prop that never
+   * gets passed.
+   */
+  newMessagesCount?: number;
+}) {
   const isDark = variant === "dark";
   const router = useRouter();
   const { isAuthenticated, logout } = useAuth();
@@ -62,6 +75,24 @@ export function SiteHeader({ variant = "light" }: { variant?: "light" | "dark" }
         </nav>
 
         <div className="flex items-center gap-3">
+          {Boolean(newMessagesCount) && (
+            <Button
+              variant="ghost"
+              size="icon"
+              asChild
+              className={cn("relative", isDark && "text-white hover:bg-white/10 hover:text-white")}
+            >
+              <Link
+                href="/admin/inquiries"
+                aria-label={`${newMessagesCount} new message${newMessagesCount === 1 ? "" : "s"}`}
+              >
+                <Mail className="size-5" />
+                <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-brand-blue-600 text-[0.6rem] font-medium text-white">
+                  {newMessagesCount && newMessagesCount > 9 ? "9+" : newMessagesCount}
+                </span>
+              </Link>
+            </Button>
+          )}
           {isAuthenticated ? (
             <>
               <Button

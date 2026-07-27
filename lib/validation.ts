@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { weekDays } from "@/lib/schedule-data";
 import { isSlotLabel, slotLabels } from "@/lib/slots";
 
 const PHONE_ALLOWED_CHARS = /^[0-9+()\-.\s]+$/;
@@ -184,6 +185,19 @@ export const appointmentSchema = z.object({
 export type AppointmentValues = z.infer<typeof appointmentSchema>;
 
 // ---------------------------------------------------------------------------
+// Reschedule (client moving their own appointment, or staff moving any)
+// ---------------------------------------------------------------------------
+
+/** Just a new date and time — everything else about the appointment (patient,
+ *  guardian, contact info, doctor) stays exactly as it was. */
+export const rescheduleSchema = z.object({
+  preferredDate: appointmentSchema.shape.preferredDate,
+  preferredTime: appointmentSchema.shape.preferredTime,
+});
+
+export type RescheduleValues = z.infer<typeof rescheduleSchema>;
+
+// ---------------------------------------------------------------------------
 // Staff-recorded booking (phone / walk-in)
 // ---------------------------------------------------------------------------
 
@@ -207,6 +221,62 @@ export const staffAppointmentSchema = appointmentSchema.extend({
 });
 
 export type StaffAppointmentValues = z.infer<typeof staffAppointmentSchema>;
+
+// ---------------------------------------------------------------------------
+// Click-to-book (staff clicking a specific doctor's open slot)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fields collected by the click-to-book modal. Deliberately no `service`,
+ * `preferredDate`, or `preferredTime` — those come from which grid cell was
+ * clicked, not from user input, so there's nothing for Zod to validate on the
+ * client for them. The Server Action takes doctorId/serviceSlug/date/time as
+ * separate trusted arguments instead — see createDoctorAppointment.
+ */
+export const doctorSlotBookingSchema = z.object({
+  patientName: appointmentSchema.shape.patientName,
+  patientInfoType: appointmentSchema.shape.patientInfoType,
+  patientDob: appointmentSchema.shape.patientDob,
+  patientAge: appointmentSchema.shape.patientAge,
+  guardianName: appointmentSchema.shape.guardianName,
+  phone: appointmentSchema.shape.phone,
+  email: appointmentSchema.shape.email,
+  notes: appointmentSchema.shape.notes,
+  hasAccount: z.boolean(),
+  familyEmail: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      (value) => !value || z.string().email().safeParse(value).success,
+      "Enter a valid email address"
+    ),
+});
+
+export type DoctorSlotBookingValues = z.infer<typeof doctorSlotBookingSchema>;
+
+// ---------------------------------------------------------------------------
+// Click-to-book (a signed-in patient clicking a specific doctor's open slot
+// on their own family portal timetable)
+// ---------------------------------------------------------------------------
+
+/**
+ * Same idea as doctorSlotBookingSchema, minus hasAccount/familyEmail — the
+ * caller IS the account here, already signed in. See
+ * createClientDoctorAppointment in app/actions/appointments.ts.
+ */
+export const clientSlotBookingSchema = z.object({
+  patientName: appointmentSchema.shape.patientName,
+  patientInfoType: appointmentSchema.shape.patientInfoType,
+  patientDob: appointmentSchema.shape.patientDob,
+  patientAge: appointmentSchema.shape.patientAge,
+  guardianName: appointmentSchema.shape.guardianName,
+  phone: appointmentSchema.shape.phone,
+  email: appointmentSchema.shape.email,
+  notes: appointmentSchema.shape.notes,
+});
+
+export type ClientSlotBookingValues = z.infer<typeof clientSlotBookingSchema>;
 
 /**
  * Cross-field check kept outside the schema for the same reason as
@@ -264,3 +334,32 @@ export function checkPatientInfo(values: {
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Doctor master data (admin)
+// ---------------------------------------------------------------------------
+
+/**
+ * No `specialty` field here on purpose. It used to be a second, independently
+ * typed text field sitting right next to `serviceSlug` — the same fact
+ * represented twice, free to drift apart the moment someone edits one and not
+ * the other. `specialty` is always derived from `serviceSlug` via
+ * serviceLabel() instead (see createDoctor/updateDoctor in
+ * app/actions/master-data.ts) — one owner, same principle as lib/slots.ts.
+ */
+export const doctorSchema = z.object({
+  name: z.string().trim().min(2, "Enter the doctor's name"),
+  serviceSlug: z.enum([
+    "developmental-pediatrician",
+    "speech-therapy",
+    "occupational-therapy",
+  ]),
+  availableDays: z.array(z.enum(weekDays)).min(1, "Pick at least one day"),
+  isActive: z.boolean(),
+  // Set by the upload helper after a successful Storage upload, never typed
+  // by hand — so this just needs to be a string, not a strict URL format
+  // check. Empty/undefined means "no photo yet", not a validation failure.
+  photoUrl: z.string().trim().optional(),
+});
+
+export type DoctorValues = z.infer<typeof doctorSchema>;

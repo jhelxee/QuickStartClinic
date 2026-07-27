@@ -187,3 +187,55 @@ export const getDoctorPresence = cache(async (): Promise<DoctorPresence[]> => {
   const { data } = await supabase.rpc("doctor_presence");
   return (data ?? []) as DoctorPresence[];
 });
+
+/** Every active doctor, no presence — safe for a logged-out visitor. */
+export interface DoctorRosterEntry {
+  id: string;
+  name: string;
+  specialty: string;
+  service_slug: string;
+  available_days: string[];
+  photo_url: string | null;
+}
+
+/**
+ * The public doctor roster for the marketing site.
+ *
+ * Unlike getDoctorPresence(), this works for logged-out visitors — the whole
+ * point is that "Meet the team" has to render for everyone, not just signed-in
+ * patients. Goes through doctor_roster() (granted to anon), never reads
+ * `doctors` directly — same narrow-columns discipline as every other doctor
+ * function here.
+ */
+export const getDoctorRoster = cache(async (): Promise<DoctorRosterEntry[]> => {
+  // Same reasoning as getUser(): a fresh, not-yet-configured project should
+  // still render the public marketing page instead of crashing over a
+  // missing key.
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("doctor_roster");
+  return (data ?? []) as DoctorRosterEntry[];
+});
+
+/**
+ * How many contact-form messages are still unread.
+ *
+ * Shared by every /admin/* page so the count can show as a badge in
+ * SiteHeader regardless of which admin page someone is on — not just the
+ * main dashboard, which is the only place that used to compute it. The
+ * "Staff can view inquiries" RLS policy is what actually restricts this to
+ * staff; the !user check here is just the same defensive habit as
+ * getDoctorPresence.
+ */
+export const getNewInquiriesCount = cache(async (): Promise<number> => {
+  const user = await getUser();
+  if (!user) return 0;
+
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("contact_inquiries")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "new");
+  return count ?? 0;
+});

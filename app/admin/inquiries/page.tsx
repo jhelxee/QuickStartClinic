@@ -48,9 +48,13 @@ export default async function InquiriesPage() {
     createdAt: r.created_at,
   }));
 
+  // Already have the full list here — no need for a second query like the
+  // other admin pages use (see getNewInquiriesCount in lib/dal.ts).
+  const newMessagesCount = inquiries.filter((i) => i.status === "new").length;
+
   return (
     <div className="flex min-h-svh flex-col">
-      <SiteHeader />
+      <SiteHeader newMessagesCount={newMessagesCount} />
 
       <main className="flex-1">
         <div className="container-clinic py-16 lg:py-20">

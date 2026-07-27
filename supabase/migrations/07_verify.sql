@@ -58,11 +58,15 @@ rollback;
 
 -- -----------------------------------------------------------------------------
 -- CHECK 5 — Doctors seeded correctly.
--- Expect: 3 rows, and service_slug values that exactly match serviceOptions in
--- lib/validation.ts. A typo here means bookings fail with "That service is
--- unavailable right now."
+-- Expect: one row per service_slug (there can be more than one doctor per
+-- specialty since script 13), active_doctors >= 1 for each, and service_slug
+-- values that exactly match serviceOptions in lib/validation.ts. A typo here
+-- means bookings fail with "That service isn't available right now."
 -- -----------------------------------------------------------------------------
-select name, specialty, service_slug from public.doctors order by name;
+select service_slug, count(*) filter (where is_active) as active_doctors
+from public.doctors
+group by service_slug
+order by service_slug;
 
 
 -- -----------------------------------------------------------------------------

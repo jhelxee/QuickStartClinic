@@ -39,20 +39,22 @@ export function DoctorStatusPanel({
         Updated live as your care team signs in and out.
       </p>
 
-      <ul className="mt-4 flex flex-col divide-y divide-border">
-        {doctors.map((doctor) => (
-          <li
-            key={doctor.doctor_id}
-            className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3 first:pt-0 last:pb-0"
-          >
-            <div className="min-w-0">
-              <p className="font-medium text-navy-900">{doctor.name}</p>
-              <p className="text-sm text-slate-400">{doctor.specialty}</p>
-            </div>
-            <DoctorStatusBadge inClinic={doctor.in_clinic} />
-          </li>
-        ))}
-      </ul>
+      <div className="mt-4 max-h-80 overflow-y-auto">
+        <ul className="flex flex-col divide-y divide-border">
+          {doctors.map((doctor) => (
+            <li
+              key={doctor.doctor_id}
+              className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3 first:pt-0 last:pb-0"
+            >
+              <div className="min-w-0">
+                <p className="font-medium text-navy-900">{doctor.name}</p>
+                <p className="text-sm text-slate-400">{doctor.specialty}</p>
+              </div>
+              <DoctorStatusBadge inClinic={doctor.in_clinic} />
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <p className="mt-4 text-xs leading-relaxed text-slate-400">
         Being in the clinic doesn&apos;t always mean a doctor is free to see

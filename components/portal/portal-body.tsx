@@ -1,17 +1,19 @@
 import Link from "next/link";
-import { ArrowLeft, CalendarPlus } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   AppointmentList,
   type AppointmentRow,
 } from "@/components/portal/appointment-list";
-import {
-  WeeklyTimetable,
-  type BookedSlot,
-  type TimetableEntry,
+import type { AppointmentDefaults } from "@/components/forms/appointment-form";
+import { ClientSchedule } from "@/components/portal/client-schedule";
+import type {
+  BookedSlot,
+  PatientSpecialtyGroup,
+  TimetableEntry,
 } from "@/components/portal/weekly-timetable";
 import { DoctorStatusPanel } from "@/components/presence/doctor-status";
+import { Button } from "@/components/ui/button";
 import type { DoctorPresence } from "@/lib/dal";
 import type { WeekColumn } from "@/lib/schedule-data";
 
@@ -37,6 +39,8 @@ export function PortalBody({
   week,
   timetableEntries,
   bookedSlots,
+  specialties,
+  defaults,
   upcoming,
 }: {
   /** YYYY-MM-DD, resolved on the server so client and server agree. */
@@ -49,6 +53,9 @@ export function PortalBody({
   week: WeekColumn[];
   timetableEntries: TimetableEntry[];
   bookedSlots: BookedSlot[];
+  specialties: PatientSpecialtyGroup[];
+  /** Prefills the click-to-book dialog's guardian/phone/email fields. */
+  defaults: AppointmentDefaults | null;
   upcoming: AppointmentRow[];
 }) {
   return (
@@ -67,24 +74,19 @@ export function PortalBody({
             as occupied to protect other families&apos; privacy.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          {/* Only for clinic-side users who arrived via "My family". Without it
-              they'd be stranded on the client view with no route back. */}
-          {showBackToStaff && (
-            <Button variant="outline" size="lg" asChild>
-              <Link href="/admin">
-                <ArrowLeft className="size-4" />
-                Back to Staff view
-              </Link>
-            </Button>
-          )}
-          <Button size="lg" asChild>
-            <Link href="/appointment">
-              <CalendarPlus className="size-4" />
-              Schedule Appointment
+        {/* Only for clinic-side users who arrived via "My family". Without it
+            they'd be stranded on the client view with no route back. No
+            separate "Schedule Appointment" button any more — clicking a free
+            slot in the timetable below is now the one way to book, same as
+            the staff side. */}
+        {showBackToStaff && (
+          <Button variant="outline" size="lg" asChild>
+            <Link href="/admin">
+              <ArrowLeft className="size-4" />
+              Back to Staff view
             </Link>
           </Button>
-        </div>
+        )}
       </div>
 
       <div className="mt-12 grid gap-8 lg:grid-cols-[1.5fr_1fr] lg:items-start">
@@ -100,13 +102,19 @@ export function PortalBody({
 
       <section className="mt-12">
         <h2 className="font-display text-xl text-navy-900">Next 7 days</h2>
+        <p className="mt-1 text-sm text-slate-700">
+          Click an available slot under any doctor to request an appointment
+          with them directly.
+        </p>
 
         <div className="mt-4">
-          <WeeklyTimetable
+          <ClientSchedule
             today={today}
             week={week}
+            specialties={specialties}
             mine={timetableEntries}
             booked={bookedSlots}
+            defaults={defaults}
           />
         </div>
       </section>

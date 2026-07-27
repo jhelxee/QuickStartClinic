@@ -1,12 +1,9 @@
 import Link from "next/link";
-import { CalendarDays, Database, Inbox, Mail, Users } from "lucide-react";
+import { CalendarDays, Database, Inbox, Mail, Search, Users } from "lucide-react";
 
 import { AppointmentActions } from "@/components/admin/appointment-actions";
-import { StaffBookingForm } from "@/components/admin/staff-booking-form";
-import {
-  StaffTimetable,
-  type StaffSlotEntry,
-} from "@/components/admin/staff-timetable";
+import { StaffSchedule } from "@/components/admin/staff-schedule";
+import type { SpecialtyGroup } from "@/components/admin/staff-timetable";
 import { DoctorStatusPanel } from "@/components/presence/doctor-status";
 import { Button } from "@/components/ui/button";
 import type { AppointmentStatus } from "@/components/portal/appointment-list";
@@ -50,7 +47,7 @@ export function AdminBody({
   todayDate,
   doctors,
   week,
-  slots,
+  specialties,
   today,
   pending,
   upcoming,
@@ -63,7 +60,7 @@ export function AdminBody({
   todayDate: string;
   doctors: DoctorPresence[];
   week: WeekColumn[];
-  slots: StaffSlotEntry[];
+  specialties: SpecialtyGroup[];
   today: StaffAppointmentRow[];
   pending: StaffAppointmentRow[];
   upcoming: StaffAppointmentRow[];
@@ -103,6 +100,13 @@ export function AdminBody({
                   {newInquiriesCount}
                 </span>
               )}
+            </Link>
+          </Button>
+
+          <Button variant="outline" size="lg" asChild>
+            <Link href="/admin/records">
+              <Search className="size-4" />
+              Records
             </Link>
           </Button>
 
@@ -164,11 +168,7 @@ export function AdminBody({
         </div>
 
         <div className="mt-5">
-          <StaffTimetable today={todayDate} week={week} entries={slots} />
-        </div>
-
-        <div className="mt-5">
-          <StaffBookingForm />
+          <StaffSchedule today={todayDate} week={week} specialties={specialties} />
         </div>
       </section>
 
@@ -213,24 +213,26 @@ function TodayRoster({ rows }: { rows: StaffAppointmentRow[] }) {
           Nobody is booked in today.
         </p>
       ) : (
-        <ul className="mt-4 divide-y divide-brand-blue-600/10">
-          {rows.map((row) => (
-            <li key={row.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5">
-              <span className="w-20 shrink-0 font-medium tabular-nums text-navy-900">
-                {row.time}
-              </span>
-              <span className="font-medium text-navy-900">{row.patientName}</span>
-              <span className="text-sm text-slate-700">
-                {row.serviceLabel} &middot; {row.doctorName}
-              </span>
-              {row.status === "pending" && (
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
-                  Not yet confirmed
+        <div className="mt-4 max-h-72 overflow-y-auto">
+          <ul className="divide-y divide-brand-blue-600/10">
+            {rows.map((row) => (
+              <li key={row.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5">
+                <span className="w-20 shrink-0 font-medium tabular-nums text-navy-900">
+                  {row.time}
                 </span>
-              )}
-            </li>
-          ))}
-        </ul>
+                <span className="font-medium text-navy-900">{row.patientName}</span>
+                <span className="text-sm text-slate-700">
+                  {row.serviceLabel} &middot; {row.doctorName}
+                </span>
+                {row.status === "pending" && (
+                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                    Not yet confirmed
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );
@@ -292,48 +294,50 @@ function Section({
           {emptyCopy}
         </p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-3">
-          {rows.map((row) => (
-            <li
-              key={row.id}
-              className="flex flex-wrap items-start justify-between gap-5 rounded-2xl border border-border bg-white p-5"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <p className="font-medium text-navy-900">{row.serviceLabel}</p>
-                  <span
-                    className={cn(
-                      "rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
-                      statusStyles[row.status]
-                    )}
-                  >
-                    {statusCopy[row.status]}
-                  </span>
+        <div className="mt-4 max-h-[640px] overflow-y-auto pr-1">
+          <ul className="flex flex-col gap-3">
+            {rows.map((row) => (
+              <li
+                key={row.id}
+                className="flex flex-wrap items-start justify-between gap-5 rounded-2xl border border-border bg-white p-5"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <p className="font-medium text-navy-900">{row.serviceLabel}</p>
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
+                        statusStyles[row.status]
+                      )}
+                    >
+                      {statusCopy[row.status]}
+                    </span>
+                  </div>
+
+                  <p className="mt-1.5 text-sm text-slate-700">
+                    {formatLongDate(row.date)} at {row.time} &middot; {row.doctorName}
+                  </p>
+
+                  <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+                    <Detail label="Patient" value={`${row.patientName} (${row.patientDetail})`} />
+                    <Detail label="Guardian" value={row.guardianName} />
+                    <Detail label="Phone" value={row.contactPhone} />
+                    <Detail label="Email" value={row.contactEmail} />
+                  </dl>
+
+                  {row.notes && (
+                    <p className="mt-3 rounded-lg bg-ice-50 p-3 text-sm leading-relaxed text-slate-700">
+                      <span className="font-medium text-navy-900">Notes: </span>
+                      {row.notes}
+                    </p>
+                  )}
                 </div>
 
-                <p className="mt-1.5 text-sm text-slate-700">
-                  {formatLongDate(row.date)} at {row.time} &middot; {row.doctorName}
-                </p>
-
-                <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-                  <Detail label="Patient" value={`${row.patientName} (${row.patientDetail})`} />
-                  <Detail label="Guardian" value={row.guardianName} />
-                  <Detail label="Phone" value={row.contactPhone} />
-                  <Detail label="Email" value={row.contactEmail} />
-                </dl>
-
-                {row.notes && (
-                  <p className="mt-3 rounded-lg bg-ice-50 p-3 text-sm leading-relaxed text-slate-700">
-                    <span className="font-medium text-navy-900">Notes: </span>
-                    {row.notes}
-                  </p>
-                )}
-              </div>
-
-              <AppointmentActions id={row.id} status={row.status} />
-            </li>
-          ))}
-        </ul>
+                <AppointmentActions id={row.id} status={row.status} />
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

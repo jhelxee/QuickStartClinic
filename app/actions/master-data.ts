@@ -1,11 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
 import { requireAdmin, type Role } from "@/lib/dal";
-import { weekDays } from "@/lib/schedule-data";
 import { createClient } from "@/lib/supabase/server";
+import { doctorSchema, serviceLabel } from "@/lib/validation";
 import type { ActionResult } from "@/app/actions/appointments";
 
 /**
@@ -16,18 +15,6 @@ import type { ActionResult } from "@/app/actions/appointments";
  * the check here is the first of three gates, the others being the
  * "Admins can update ..." RLS policies and the guard_profile_update trigger.
  */
-
-const doctorSchema = z.object({
-  name: z.string().trim().min(2, "Enter the doctor's name"),
-  specialty: z.string().trim().min(2, "Enter a specialty"),
-  serviceSlug: z.enum([
-    "developmental-pediatrician",
-    "speech-therapy",
-    "occupational-therapy",
-  ]),
-  availableDays: z.array(z.enum(weekDays)).min(1, "Pick at least one day"),
-  isActive: z.boolean(),
-});
 
 /** Update a doctor's details and availability. */
 export async function updateDoctor(
@@ -47,21 +34,16 @@ export async function updateDoctor(
     .from("doctors")
     .update({
       name: v.name,
-      specialty: v.specialty,
+      // Derived, not user-entered — see the comment on doctorSchema.
+      specialty: serviceLabel(v.serviceSlug),
       service_slug: v.serviceSlug,
       available_days: v.availableDays,
       is_active: v.isActive,
+      photo_url: v.photoUrl?.trim() ? v.photoUrl : null,
     })
     .eq("id", id);
 
   if (error) {
-    // 23505 — service_slug is unique. Two doctors can't own the same service,
-    // because that's what makes "Doctor in Charge" resolvable at booking time.
-    if (error.code === "23505") {
-      return {
-        error: "Another doctor is already assigned to that service. Change theirs first.",
-      };
-    }
     return { error: "Could not save those changes." };
   }
 
@@ -84,16 +66,15 @@ export async function createDoctor(values: unknown): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.from("doctors").insert({
     name: v.name,
-    specialty: v.specialty,
+    // Derived, not user-entered — see the comment on doctorSchema.
+    specialty: serviceLabel(v.serviceSlug),
     service_slug: v.serviceSlug,
     available_days: v.availableDays,
     is_active: v.isActive,
+    photo_url: v.photoUrl?.trim() ? v.photoUrl : null,
   });
 
   if (error) {
-    if (error.code === "23505") {
-      return { error: "A doctor is already assigned to that service." };
-    }
     return { error: "Could not add that doctor." };
   }
 
@@ -106,6 +87,12 @@ export async function createDoctor(values: unknown): Promise<ActionResult> {
  *
  * This is what makes presence possible — without the link there's no way to
  * tell whose session belongs to which doctor. Pass an empty email to unlink.
+ *
+ * This is also the ONLY place a profile's role becomes (or stops being)
+ * "doctor" — Staff Access no longer offers Doctor as a manual choice, so
+ * linking/unlinking here is the full lifecycle: it promotes on link, and
+ * demotes back to client on unlink. See StaffAccessTable for the other side
+ * of that removal.
  */
 export async function linkDoctorAccount(
   doctorId: string,
@@ -116,12 +103,34 @@ export async function linkDoctorAccount(
   const supabase = await createClient();
 
   if (!email.trim()) {
+    // Look up who's currently linked before clearing it, so their role can
+    // be reverted too — the row about to be nulled is the only place that's
+    // recorded.
+    const { data: doctor } = await supabase
+      .from("doctors")
+      .select("user_id")
+      .eq("id", doctorId)
+      .maybeSingle();
+
     const { error } = await supabase
       .from("doctors")
       .update({ user_id: null, last_seen_at: null })
       .eq("id", doctorId);
     if (error) return { error: "Could not unlink that account." };
+
+    // Only step them back down from "doctor" specifically — if an admin had
+    // since changed them to something else for their own reasons, unlinking
+    // a stale doctor record shouldn't clobber that.
+    if (doctor?.user_id) {
+      await supabase
+        .from("profiles")
+        .update({ role: "client" })
+        .eq("id", doctor.user_id)
+        .eq("role", "doctor");
+    }
+
     revalidatePath("/admin/master-data");
+    revalidatePath("/admin");
     return { success: true };
   }
 
@@ -150,7 +159,16 @@ export async function linkDoctorAccount(
     return { error: "Could not link that account." };
   }
 
+  // Only promote from "client" — never silently downgrade an existing staff
+  // member or admin who happens to also be getting linked as a doctor. They
+  // keep whatever access they already had; the account just also gains a
+  // doctor record.
+  if (profile.role === "client") {
+    await supabase.from("profiles").update({ role: "doctor" }).eq("id", profile.id);
+  }
+
   revalidatePath("/admin/master-data");
+  revalidatePath("/admin");
   return { success: true };
 }
 
@@ -161,6 +179,11 @@ export async function linkDoctorAccount(
  * unless is_admin(), and rejects it outright when the target is the caller.
  * That self-exclusion prevents an admin locking everyone out by demoting
  * themselves — so the error below is a real path, not a theoretical one.
+ *
+ * "doctor" is deliberately not settable here — see linkDoctorAccount above,
+ * which is the only path that grants or revokes it. A Server Action is a
+ * public POST endpoint, so this has to be enforced here too, not just by
+ * StaffAccessTable no longer offering it as a dropdown choice.
  */
 export async function setUserRole(
   userId: string,
@@ -170,6 +193,12 @@ export async function setUserRole(
 
   if (userId === admin.id) {
     return { error: "You can't change your own role. Ask another administrator." };
+  }
+
+  if (role === "doctor") {
+    return {
+      error: "Doctor access is set by linking an account in Master Data → Doctors, not here.",
+    };
   }
 
   const supabase = await createClient();

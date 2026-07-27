@@ -4,7 +4,8 @@ import { useTransition } from "react";
 import { Check, CheckCheck, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { setAppointmentStatus, type StaffStatus } from "@/app/actions/admin";
+import { rescheduleAppointmentAsStaff, setAppointmentStatus, type StaffStatus } from "@/app/actions/admin";
+import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { Button } from "@/components/ui/button";
 import type { AppointmentStatus } from "@/components/portal/appointment-list";
 
@@ -67,6 +68,8 @@ export function AppointmentActions({
           Mark completed
         </Button>
       )}
+
+      <RescheduleDialog id={id} action={rescheduleAppointmentAsStaff} />
 
       <Button
         variant="outline"

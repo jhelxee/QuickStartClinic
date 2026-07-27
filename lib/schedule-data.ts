@@ -16,45 +16,36 @@ export const officeHours: { day: string; hours: string }[] = [
 ];
 
 /**
- * Provider list shown on the public landing page.
+ * Hand-written bio copy for the public landing page, keyed by doctor name.
  *
- * Display copy only — nothing books against it. The `doctors` TABLE is the
- * source of truth for scheduling, and it's what "Doctor in Charge" is resolved
- * from at booking time (see app/actions/appointments.ts).
+ * Everything else about a provider — who's listed, their specialty, their
+ * schedule, whether they're currently in the clinic — now comes live from the
+ * `doctors` table via `doctor_roster()` / `doctor_presence()` (see
+ * components/marketing/hero.tsx and team-section.tsx), not from a hand-synced
+ * copy of it. Only `credential` and `bio` live here, because the database has
+ * nowhere to put that prose.
  *
- * Kept as a local constant so the marketing page renders without a database
- * round trip or Supabase credentials. If you add or rename a provider, update
- * both this list and the doctors table.
+ * Keyed by name rather than the doctor's real `id` (uuid) — this project has
+ * no way to query the live Supabase project from outside the dashboard, so
+ * there was no way to look up real ids while writing this. If your clinic
+ * ever has two providers with the same name, switch this to `id` keys (run
+ * `select id, name from doctors;` in the SQL Editor to get them) — until
+ * then, name is a perfectly stable key for three people.
  */
-export const doctorSchedule: {
-  name: string;
-  credential: string;
-  specialty: string;
-  bio: string;
-  days: WeekDay[];
-}[] = [
-  {
-    name: "Dr. Chen",
+export const doctorBios: Record<string, { credential: string; bio: string }> = {
+  "Dr. Chen": {
     credential: "MD, Developmental-Behavioral Pediatrics",
-    specialty: "Developmental Pediatrician",
     bio: "Twelve years guiding families through evaluations and milestones, with a focus on unhurried, whole-child assessments over rushed checklists.",
-    days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
   },
-  {
-    name: "Ms. Alvarez",
+  "Ms. Alvarez": {
     credential: "M.S., CCC-SLP",
-    specialty: "Speech Therapy",
     bio: "Specializes in early language delay and feeding therapy, building communication tools that fit into a family's daily routine, not around it.",
-    days: ["Monday", "Wednesday", "Friday"],
   },
-  {
-    name: "Mr. Boone",
+  "Mr. Boone": {
     credential: "OTR/L",
-    specialty: "Occupational Therapy",
     bio: "Works through play — sensory integration and fine motor skills — toward the everyday confidence of getting dressed, writing, and eating independently.",
-    days: ["Tuesday", "Thursday", "Saturday"],
   },
-];
+};
 
 export function dateToWeekDay(dateStr: string): WeekDay | null {
   const date = new Date(`${dateStr}T00:00:00`);

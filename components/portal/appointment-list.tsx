@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { CalendarX2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { cancelAppointment } from "@/app/actions/appointments";
+import { cancelAppointment, rescheduleAppointment } from "@/app/actions/appointments";
+import { RescheduleDialog } from "@/components/reschedule-dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -128,10 +129,13 @@ function AppointmentCard({ appointment }: { appointment: AppointmentRow }) {
             </Button>
           </div>
         ) : (
-          <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
-            <CalendarX2 className="size-4" />
-            Cancel
-          </Button>
+          <div className="flex items-center gap-2">
+            <RescheduleDialog id={appointment.id} action={rescheduleAppointment} />
+            <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
+              <CalendarX2 className="size-4" />
+              Cancel
+            </Button>
+          </div>
         ))}
     </li>
   );

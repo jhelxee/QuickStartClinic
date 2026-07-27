@@ -2,16 +2,21 @@ import type { Metadata } from "next";
 
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
+import type { AppointmentDefaults } from "@/components/forms/appointment-form";
 import { PortalBody } from "@/components/portal/portal-body";
 import type { AppointmentRow, AppointmentStatus } from "@/components/portal/appointment-list";
-import type { BookedSlot, TimetableEntry } from "@/components/portal/weekly-timetable";
+import type {
+  BookedSlot,
+  PatientSpecialtyGroup,
+  TimetableEntry,
+} from "@/components/portal/weekly-timetable";
 import { redirect } from "next/navigation";
 
 import { getDoctorPresence, getProfile, isClinicSide, requireUser } from "@/lib/dal";
 import { rollingColumns, toISODate } from "@/lib/schedule-data";
 import { slotTimeToLabel } from "@/lib/slots";
 import { createClient } from "@/lib/supabase/server";
-import { serviceLabel } from "@/lib/validation";
+import { serviceLabel, serviceOptions } from "@/lib/validation";
 
 export const metadata: Metadata = {
   title: "Family Portal — QuickStart Clinic",
@@ -37,6 +42,7 @@ interface AppointmentRecord {
   slot_time: string;
   status: AppointmentStatus;
   patient_name: string;
+  doctor_id: string;
   // A many-to-one embed. PostgREST has returned this as an object in some
   // versions and a single-element array in others, so handle both.
   doctors: { name: string } | { name: string }[] | null;
@@ -122,7 +128,7 @@ export default async function PortalPage({
   const [{ data: records }, { data: bookedRaw }, doctors] = await Promise.all([
     supabase
       .from("appointments")
-      .select("id, service, scheduled_date, slot_time, status, patient_name, doctors(name)")
+      .select("id, service, scheduled_date, slot_time, status, patient_name, doctor_id, doctors(name)")
       .eq("user_id", user.id)
       .gte("scheduled_date", fetchFrom)
       .order("scheduled_date", { ascending: true })
@@ -154,6 +160,7 @@ export default async function PortalPage({
           date: r.scheduled_date,
           time,
           serviceLabel: serviceLabel(r.service),
+          doctorId: r.doctor_id,
         },
       ];
     });
@@ -187,13 +194,41 @@ export default async function PortalPage({
   ];
 
   const bookedSlots: BookedSlot[] = (
-    (bookedRaw ?? []) as { slot_date: string; booked_time: string }[]
+    (bookedRaw ?? []) as { slot_date: string; booked_time: string; doctor_id: string }[]
   ).flatMap((slot) => {
     const time = slotTimeToLabel(slot.booked_time);
-    return time ? [{ date: slot.slot_date, time }] : [];
+    return time ? [{ date: slot.slot_date, time, doctorId: slot.doctor_id }] : [];
   });
 
+  // Three fixed tabs (from serviceOptions, not from who happens to have
+  // doctors), each grouping the active doctors who offer that service — same
+  // shape and reasoning as the staff timetable's specialties in
+  // app/admin/page.tsx, just without any patient-identifying data attached.
+  const specialties: PatientSpecialtyGroup[] = serviceOptions.map((option) => ({
+    serviceSlug: option.value,
+    serviceLabel: option.label,
+    doctors: doctors
+      .filter((d) => d.service_slug === option.value)
+      .map((d) => ({
+        doctorId: d.doctor_id,
+        doctorName: d.name,
+        serviceSlug: d.service_slug,
+        inClinic: d.in_clinic,
+      })),
+  }));
+
   const firstName = (profile?.legal_name ?? "there").split(" ")[0];
+
+  // Prefills the click-to-book dialog's guardian/phone/email fields — same
+  // pattern as app/appointment/page.tsx. Null is only theoretical here (this
+  // page already requires a signed-in profile to render at all).
+  const defaults: AppointmentDefaults | null = profile
+    ? {
+        guardianName: profile.legal_name,
+        email: profile.email,
+        phone: profile.phone,
+      }
+    : null;
 
   return (
     <div className="flex min-h-svh flex-col">
@@ -213,6 +248,8 @@ export default async function PortalPage({
             week={week}
             timetableEntries={timetableEntries}
             bookedSlots={bookedSlots}
+            specialties={specialties}
+            defaults={defaults}
             upcoming={upcoming}
           />
         </div>

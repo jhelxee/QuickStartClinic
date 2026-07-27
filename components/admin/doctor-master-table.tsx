@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Link2, Loader2, Save } from "lucide-react";
+import Image from "next/image";
+import { ImageUp, Link2, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { linkDoctorAccount, updateDoctor } from "@/app/actions/master-data";
@@ -17,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { weekDays, type WeekDay } from "@/lib/schedule-data";
+import { uploadDoctorPhoto, validateDoctorPhoto } from "@/lib/upload-doctor-photo";
 import { serviceOptions } from "@/lib/validation";
 
 export interface DoctorMasterRow {
@@ -28,14 +30,17 @@ export interface DoctorMasterRow {
   isActive: boolean;
   inClinic: boolean;
   linkedEmail: string | null;
+  photoUrl: string | null;
 }
 
 export function DoctorMasterTable({ doctors }: { doctors: DoctorMasterRow[] }) {
   return (
-    <div className="flex flex-col gap-4">
-      {doctors.map((doctor) => (
-        <DoctorCard key={doctor.id} doctor={doctor} />
-      ))}
+    <div className="max-h-[640px] overflow-y-auto rounded-2xl border border-border bg-ice-50/40 p-4">
+      <div className="flex flex-col gap-4">
+        {doctors.map((doctor) => (
+          <DoctorCard key={doctor.id} doctor={doctor} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -43,11 +48,12 @@ export function DoctorMasterTable({ doctors }: { doctors: DoctorMasterRow[] }) {
 function DoctorCard({ doctor }: { doctor: DoctorMasterRow }) {
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState(doctor.name);
-  const [specialty, setSpecialty] = useState(doctor.specialty);
   const [serviceSlug, setServiceSlug] = useState(doctor.serviceSlug);
   const [days, setDays] = useState<WeekDay[]>(doctor.availableDays);
   const [isActive, setIsActive] = useState(doctor.isActive);
   const [email, setEmail] = useState(doctor.linkedEmail ?? "");
+  const [photoUrl, setPhotoUrl] = useState(doctor.photoUrl ?? "");
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   function toggleDay(day: WeekDay, checked: boolean) {
     setDays((current) =>
@@ -55,14 +61,38 @@ function DoctorCard({ doctor }: { doctor: DoctorMasterRow }) {
     );
   }
 
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    const validationError = validateDoctorPhoto(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    try {
+      const url = await uploadDoctorPhoto(file);
+      setPhotoUrl(url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not upload photo.");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  }
+
   function save() {
     startTransition(async () => {
+      // specialty isn't collected here — it's derived from serviceSlug
+      // server-side (see updateDoctor), not a second field to keep in sync.
       const result = await updateDoctor(doctor.id, {
         name,
-        specialty,
         serviceSlug,
         availableDays: days,
         isActive,
+        photoUrl,
       });
       if (result.error) {
         toast.error("Couldn't save", { description: result.error });
@@ -86,7 +116,22 @@ function DoctorCard({ doctor }: { doctor: DoctorMasterRow }) {
   return (
     <div className="rounded-2xl border border-border bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="font-display text-lg text-navy-900">{doctor.name}</p>
+        <div className="flex items-center gap-3">
+          <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-ice-50">
+            {photoUrl ? (
+              <Image
+                src={photoUrl}
+                alt=""
+                width={44}
+                height={44}
+                className="size-full object-cover"
+              />
+            ) : (
+              <ImageUp className="size-4 text-slate-300" aria-hidden="true" />
+            )}
+          </div>
+          <p className="font-display text-lg text-navy-900">{doctor.name}</p>
+        </div>
         <div className="flex items-center gap-2.5">
           {doctor.linkedEmail ? (
             <DoctorStatusBadge inClinic={doctor.inClinic} />
@@ -103,15 +148,26 @@ function DoctorCard({ doctor }: { doctor: DoctorMasterRow }) {
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-3">
+      <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-navy-900 transition-colors hover:bg-ice-50">
+        {isUploadingPhoto ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <ImageUp className="size-4" />
+        )}
+        {isUploadingPhoto ? "Uploading…" : photoUrl ? "Replace photo" : "Upload photo"}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={handlePhotoChange}
+          disabled={isUploadingPhoto}
+        />
+      </label>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-navy-900">Name</span>
           <Input value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-navy-900">Specialty</span>
-          <Input value={specialty} onChange={(e) => setSpecialty(e.target.value)} />
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">
@@ -173,7 +229,7 @@ function DoctorCard({ doctor }: { doctor: DoctorMasterRow }) {
           <Link2 className="size-4" />
           {email.trim() ? "Link account" : "Unlink"}
         </Button>
-        <Button onClick={save} disabled={isPending}>
+        <Button onClick={save} disabled={isPending || isUploadingPhoto}>
           {isPending ? (
             <>
               <Loader2 className="size-4 animate-spin" />
@@ -189,9 +245,9 @@ function DoctorCard({ doctor }: { doctor: DoctorMasterRow }) {
       </div>
 
       <p className="mt-3 text-xs leading-relaxed text-slate-400">
-        Linking an account is what lets this doctor show as &ldquo;in
-        clinic&rdquo;. Their presence comes from their own sign-in activity —
-        set their role to <strong>doctor</strong> in Staff access below.
+        Linking an account grants clinic access and lets this doctor show as
+        &ldquo;in clinic&rdquo; — their presence comes from their own sign-in
+        activity. Unlinking reverts the account back to a plain client.
       </p>
     </div>
   );

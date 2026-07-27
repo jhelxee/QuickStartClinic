@@ -3,14 +3,14 @@ import type { Metadata } from "next";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { AdminBody, type StaffAppointmentRow } from "@/components/admin/admin-body";
-import type { StaffSlotEntry } from "@/components/admin/staff-timetable";
+import type { SpecialtyGroup, StaffSlotEntry } from "@/components/admin/staff-timetable";
 import type { AppointmentStatus } from "@/components/portal/appointment-list";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
 import { getDoctorPresence, requireStaff } from "@/lib/dal";
 import { rollingColumns, toISODate } from "@/lib/schedule-data";
 import { slotTimeToLabel } from "@/lib/slots";
 import { createClient } from "@/lib/supabase/server";
-import { serviceLabel } from "@/lib/validation";
+import { serviceLabel, serviceOptions } from "@/lib/validation";
 
 export const metadata: Metadata = {
   title: "Staff — QuickStart Clinic",
@@ -35,6 +35,7 @@ interface StaffRecord {
   contact_email: string;
   notes: string | null;
   user_id: string | null;
+  doctor_id: string;
   doctors: { name: string } | { name: string }[] | null;
 }
 
@@ -57,8 +58,25 @@ export default async function AdminPage() {
   const profile = await requireStaff();
 
   const supabase = await createClient();
-  const today = toISODate(new Date());
+  const now = new Date();
+  const today = toISODate(now);
   const doctors = await getDoctorPresence();
+
+  // Bounded on purpose — this used to fetch every appointment ever booked, on
+  // every load, forever. Built from date parts rather than millisecond math,
+  // same reasoning as app/portal/page.tsx's retention window: it stays
+  // correct across month/year boundaries and daylight-saving shifts.
+  const RETENTION_PAST_DAYS = 5;
+  const RETENTION_FUTURE_DAYS = 10;
+  const retentionStart = toISODate(
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() - RETENTION_PAST_DAYS)
+  );
+  const retentionEnd = toISODate(
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() + RETENTION_FUTURE_DAYS)
+  );
+  // "Past and closed" additionally caps at today+5 (tighter than the fetch
+  // window, which extends to +10 for "Confirmed and upcoming"'s sake).
+  const pastCutoff = toISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5));
 
   // No .eq() filter: the "Staff can view all appointments" policy widens what
   // this same query returns. Run it as a patient and you'd get only your own
@@ -67,11 +85,20 @@ export default async function AdminPage() {
   // The unread-message count is independent of the appointments query, so it
   // runs alongside it rather than after it — same reasoning as the parallel
   // fetch in app/portal/page.tsx.
+  //
+  // pending is fetched unconditionally, outside the date window — it's an
+  // action queue, not history, and a family can request a slot weeks out.
+  // Hiding a pending request behind a retention window would mean staff never
+  // see it needing confirmation. Older history beyond this window is what
+  // /admin/records is for.
   const [{ data }, { count: newInquiriesCount }] = await Promise.all([
     supabase
       .from("appointments")
       .select(
-        "id, service, scheduled_date, slot_time, status, patient_name, patient_dob, patient_age, guardian_name, contact_phone, contact_email, notes, user_id, doctors(name)"
+        "id, service, scheduled_date, slot_time, status, patient_name, patient_dob, patient_age, guardian_name, contact_phone, contact_email, notes, user_id, doctor_id, doctors(name)"
+      )
+      .or(
+        `status.eq.pending,and(scheduled_date.gte.${retentionStart},scheduled_date.lte.${retentionEnd})`
       )
       .order("scheduled_date", { ascending: true })
       .order("slot_time", { ascending: true }),
@@ -87,26 +114,59 @@ export default async function AdminPage() {
   const weekEnd = week[week.length - 1].date;
 
   // The week grid, with names — staff are authorised to see who is booked.
-  const slots: StaffSlotEntry[] = records.flatMap((record) => {
-    if (record.scheduled_date < weekStart || record.scheduled_date > weekEnd) {
-      return [];
+  // Kept with doctorId through this intermediate step so it can be filtered
+  // into each doctor's own row below; StaffSlotEntry itself doesn't carry
+  // doctorId, since which doctor an entry belongs to is implied by which
+  // row it renders under once grouped.
+  const slotBuilds: (StaffSlotEntry & { doctorId: string })[] = records.flatMap(
+    (record) => {
+      if (record.scheduled_date < weekStart || record.scheduled_date > weekEnd) {
+        return [];
+      }
+      const time = slotTimeToLabel(record.slot_time);
+      if (!time) return [];
+      return [
+        {
+          id: record.id,
+          date: record.scheduled_date,
+          time,
+          patientName: record.patient_name,
+          serviceLabel: serviceLabel(record.service),
+          status: record.status,
+          // No account attached — recorded by staff from a call or the desk.
+          phoneBooking: record.user_id === null,
+          doctorId: record.doctor_id,
+        },
+      ];
     }
-    const time = slotTimeToLabel(record.slot_time);
-    if (!time) return [];
-    return [
-      {
-        id: record.id,
-        date: record.scheduled_date,
-        time,
-        patientName: record.patient_name,
-        serviceLabel: serviceLabel(record.service),
-        doctorName: doctorName(record),
-        status: record.status,
-        // No account attached — recorded by staff from a call or the desk.
-        phoneBooking: record.user_id === null,
-      },
-    ];
-  });
+  );
+
+  // Three fixed tabs (from serviceOptions, not from who happens to have
+  // doctors), each grouping the active doctors who offer that service and
+  // that doctor's own bookings only.
+  const specialties: SpecialtyGroup[] = serviceOptions.map((option) => ({
+    serviceSlug: option.value,
+    serviceLabel: option.label,
+    doctors: doctors
+      .filter((d) => d.service_slug === option.value)
+      .map((d) => ({
+        doctorId: d.doctor_id,
+        doctorName: d.name,
+        serviceSlug: d.service_slug,
+        inClinic: d.in_clinic,
+        entries: slotBuilds
+          .filter((s) => s.doctorId === d.doctor_id)
+          .map((s) => ({
+            id: s.id,
+            date: s.date,
+            time: s.time,
+            patientName: s.patientName,
+            serviceLabel: s.serviceLabel,
+            status: s.status,
+            phoneBooking: s.phoneBooking,
+          })),
+      })),
+  }));
 
   const rows: StaffAppointmentRow[] = records.flatMap((record) => {
     const time = slotTimeToLabel(record.slot_time);
@@ -140,9 +200,10 @@ export default async function AdminPage() {
   );
   const past = rows.filter(
     (row) =>
-      row.status === "completed" ||
-      row.status === "cancelled" ||
-      (row.status === "approved" && row.date < today)
+      row.date <= pastCutoff &&
+      (row.status === "completed" ||
+        row.status === "cancelled" ||
+        (row.status === "approved" && row.date < today))
   );
 
   return (
@@ -151,7 +212,7 @@ export default async function AdminPage() {
           Mounted here because /admin is where a doctor spends their day. */}
       {profile.role === "doctor" && <PresenceHeartbeat />}
 
-      <SiteHeader />
+      <SiteHeader newMessagesCount={newInquiriesCount ?? 0} />
 
       {/* Plain white, matching the portal and the landing page. */}
       <main className="flex-1">
@@ -162,7 +223,7 @@ export default async function AdminPage() {
             todayDate={today}
             doctors={doctors}
             week={week}
-            slots={slots}
+            specialties={specialties}
             today={todayRows}
             pending={pending}
             upcoming={upcoming}

@@ -13,8 +13,8 @@ import { Button } from "@/components/ui/button";
 import { BlobMotif } from "@/components/marketing/blob-motif";
 import { OfficeStatusBadge } from "@/components/marketing/office-status-badge";
 import { DoctorStatusBadge } from "@/components/presence/doctor-status";
-import type { DoctorPresence } from "@/lib/dal";
-import { doctorSchedule, officeHours } from "@/lib/schedule-data";
+import type { DoctorPresence, DoctorRosterEntry } from "@/lib/dal";
+import { officeHours } from "@/lib/schedule-data";
 
 function shortDays(days: string[]) {
   return days.map((day) => day.slice(0, 3)).join(", ");
@@ -33,29 +33,33 @@ const trustPoints = [
 ];
 
 export function Hero({
+  roster,
   presence = [],
 }: {
+  /** Every active doctor, live from the database — works for logged-out
+   *  visitors too. See getDoctorRoster() in lib/dal.ts. */
+  roster: DoctorRosterEntry[];
   /**
-   * Live "in clinic" status, keyed by doctor name.
+   * Live "in clinic" status, keyed by doctor id.
    *
    * Empty for logged-out visitors — getDoctorPresence() in lib/dal.ts returns
    * [] before checking anything else, because doctor_presence() is granted to
    * `authenticated` only. That means this card renders identically to before
-   * for anyone not signed in: no live badge, same static schedule. The privacy
+   * for anyone not signed in: no live badge, same roster. The privacy
    * boundary decided earlier ("signed-in patients only can see who's in the
    * building") holds automatically here rather than needing a second check in
    * this component to remember and get right.
    */
   presence?: DoctorPresence[];
 }) {
-  const presenceByName = new Map(presence.map((p) => [p.name, p.in_clinic]));
+  const presenceById = new Map(presence.map((p) => [p.doctor_id, p.in_clinic]));
 
   return (
     <section className="relative overflow-hidden bg-navy-900">
       <BlobMotif className="-top-32 -right-40 h-[560px] w-[560px] opacity-50" />
       <BlobMotif className="-bottom-48 -left-32 h-[420px] w-[420px] opacity-30" />
 
-      <div className="container-clinic relative grid gap-16 py-20 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:py-28">
+      <div className="container-clinic relative grid gap-16 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:py-16">
         <div className="max-w-xl">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-semibold tracking-wide text-brand-blue-400 uppercase backdrop-blur-sm">
             <Sparkles className="size-3.5" />
@@ -149,15 +153,15 @@ export function Hero({
                   <p className="text-sm font-semibold text-navy-900">Doctor&apos;s Schedule</p>
                 </div>
                 <div className="mt-4 flex flex-col gap-3">
-                  {doctorSchedule.map((doctor) => {
+                  {roster.map((doctor) => {
                     const Icon = specialtyIcon[doctor.specialty] ?? Brain;
                     // undefined (not signed in, or this doctor has no linked
                     // account yet) vs. false (signed in, confirmed not in
                     // clinic) are deliberately different: only the latter shows
                     // the grey "Not in right now" badge.
-                    const inClinic = presenceByName.get(doctor.name);
+                    const inClinic = presenceById.get(doctor.id);
                     return (
-                      <div key={doctor.name} className="flex items-start gap-3">
+                      <div key={doctor.id} className="flex items-start gap-3">
                         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700">
                           <Icon className="size-4" strokeWidth={1.75} />
                         </span>
@@ -167,7 +171,7 @@ export function Hero({
                           </p>
                           <p className="text-xs text-slate-400">{doctor.specialty}</p>
                           <p className="mt-0.5 text-xs font-medium text-brand-blue-700">
-                            {shortDays(doctor.days)}
+                            {shortDays(doctor.available_days)}
                           </p>
                         </div>
                         {/* Right-aligned rather than sitting next to the name —
