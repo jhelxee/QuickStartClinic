@@ -113,12 +113,14 @@ export default async function RecordsPage({
         .select(SELECT_COLUMNS)
         .ilike("patient_name", `%${query}%`)
         .order("scheduled_date", { ascending: false })
+        .order("slot_time", { ascending: false })
         .limit(RESULT_LIMIT),
       supabase
         .from("appointments")
         .select(SELECT_COLUMNS)
         .ilike("guardian_name", `%${query}%`)
         .order("scheduled_date", { ascending: false })
+        .order("slot_time", { ascending: false })
         .limit(RESULT_LIMIT),
     ]);
 
@@ -129,8 +131,15 @@ export default async function RecordsPage({
     ]) {
       merged.set(record.id, record);
     }
+    // Date first, then time-of-day within that date — without the second key,
+    // two same-day visits fall back to whatever order the merge happened to
+    // produce, which isn't reliably "latest first".
     results = Array.from(merged.values())
-      .sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date))
+      .sort(
+        (a, b) =>
+          b.scheduled_date.localeCompare(a.scheduled_date) ||
+          b.slot_time.localeCompare(a.slot_time)
+      )
       .slice(0, RESULT_LIMIT);
   }
 
